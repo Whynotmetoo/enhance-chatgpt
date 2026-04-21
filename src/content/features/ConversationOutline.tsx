@@ -860,7 +860,6 @@ export function ConversationOutline(): ReactElement | null {
           onClick={() => handleOutlineItemClick(item)}
         >
           <span className="ecg-outline-disclosure" />
-          <span className="ecg-outline-dot" />
           <span className="ecg-outline-label">{item.label}</span>
         </button>
       ))}

@@ -343,11 +343,10 @@
   gap: 7px;
   line-height: 1.35;
   min-height: 28px;
-  opacity: 0.64;
   overflow: hidden;
   padding: 4px 6px 4px calc(6px + var(--ecg-depth) * 10px);
   text-align: left;
-  transition: opacity 170ms ease, background-color 170ms ease, color 170ms ease;
+  transition: color 170ms ease, font-weight 170ms ease;
   width: 100%;
 }
 
@@ -358,32 +357,12 @@
 }
 
 .ecg-outline-item:hover {
-  background: var(--ecg-hover);
-  opacity: 0.9;
+  color: var(--ecg-text);
 }
 
 .ecg-outline-item[data-active="true"] {
   color: var(--ecg-text);
-  opacity: 1;
-}
-
-.ecg-outline-item[data-kind="user"] {
-  color: var(--ecg-text);
   font-weight: 600;
-  opacity: 0.92;
-}
-
-.ecg-outline-item[data-kind="assistant"] {
-  opacity: 0.78;
-}
-
-.ecg-outline-dot {
-  background: currentColor;
-  border-radius: 999px;
-  flex: 0 0 auto;
-  height: 4px;
-  opacity: 0.62;
-  width: 4px;
 }
 
 .ecg-outline-disclosure {

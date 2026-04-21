@@ -374,23 +374,17 @@ button {
   gap: 8px;
   height: 30px;
   justify-content: flex-start;
-  opacity: 0.62;
   padding: 0 8px 0 calc(6px + var(--depth, 0) * 10px);
   text-align: left;
 }
 
-.mock-outline-item:hover,
-.mock-outline-item[data-active="true"] {
-  background: rgba(0, 0, 0, 0.045);
+.mock-outline-item:hover {
   color: #2f2f2f;
-  opacity: 1;
 }
 
-.mock-outline-item span {
-  background: currentColor;
-  border-radius: 999px;
-  height: 4px;
-  width: 4px;
+.mock-outline-item[data-active="true"] {
+  color: #2f2f2f;
+  font-weight: 600;
 }
 
 .component-breakdown {

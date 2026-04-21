@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import {
   ArchiveIcon,
   CloseIcon,
-  CodeIcon,
   DeleteIcon,
   DotsIcon,
   PlusIcon,
@@ -184,7 +183,6 @@ function OutlineMockup(): ReactElement {
           style={{ "--depth": item.level } as MockDepthStyle}
           type="button"
         >
-          {item.kind === "code" ? <CodeIcon /> : <span />}
           {item.label}
         </button>
       ))}
@@ -234,15 +232,12 @@ function ComponentBreakdown(): ReactElement {
         <div className="component-card">
           <h3>Outline item</h3>
           <button className="mock-outline-item demo-outline" data-active="false" type="button">
-            <span />
             Default
           </button>
           <button className="mock-outline-item demo-outline" data-active="true" type="button">
-            <span />
             Active in viewport
           </button>
           <button className="mock-outline-item demo-outline" data-kind="code" type="button">
-            <CodeIcon />
             Code block
           </button>
         </div>
