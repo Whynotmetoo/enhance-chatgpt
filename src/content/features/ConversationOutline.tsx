@@ -22,6 +22,11 @@ type OutlineSource = {
   items: OutlineItem[];
 };
 
+type ConversationLocation = {
+  conversationId: string | null;
+  changedAt: number;
+};
+
 type RenderedOutlineItem = OutlineItem & {
   hasChildren: boolean;
   originalIndex: number;
@@ -37,6 +42,7 @@ const turnSelector = "[data-turn='user'], [data-turn='assistant']";
 const messageSelector = "[data-message-author-role='user'], [data-message-author-role='assistant']";
 const answerHeadingSelector = ".markdown :is(h1, h2, h3, h4, h5, h6)";
 const conversationPathPattern = /^\/c\/([^/?#]+)/;
+const locationChangeSource = "enhance-chatgpt:location-changed";
 
 type ApiAuthorRole = "user" | "assistant" | "system" | "tool";
 
@@ -132,9 +138,18 @@ function conversationMutationRoot(): HTMLElement {
   return document.querySelector<HTMLElement>("#thread") ?? document.querySelector<HTMLElement>("main") ?? document.body;
 }
 
+function conversationIdFromUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    const match = parsedUrl.pathname.match(conversationPathPattern);
+    return match?.[1] ?? conversationIdFromHref(parsedUrl.href);
+  } catch {
+    return conversationIdFromHref(url);
+  }
+}
+
 function conversationIdFromLocation(): string | null {
-  const match = window.location.pathname.match(conversationPathPattern);
-  return match?.[1] ?? conversationIdFromHref(window.location.href);
+  return conversationIdFromUrl(window.location.href);
 }
 
 function turnRole(turn: HTMLElement): "user" | "assistant" | null {
@@ -532,8 +547,16 @@ function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] 
   return items;
 }
 
-async function fetchConversationOutline(conversationId: string, signal: AbortSignal): Promise<OutlineItem[]> {
-  const conversation = (await fetchConversationInPageContext(conversationId, signal)) as ApiConversation;
+async function fetchConversationOutline(
+  conversationId: string,
+  signal: AbortSignal,
+  minCapturedAt: number
+): Promise<OutlineItem[]> {
+  const conversation = (await fetchConversationInPageContext(
+    conversationId,
+    signal,
+    minCapturedAt
+  )) as ApiConversation;
   return itemsFromApiConversation(conversation);
 }
 
@@ -554,7 +577,8 @@ function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
 
 async function fetchConversationOutlineWithRetry(
   conversationId: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  minCapturedAt: number
 ): Promise<OutlineItem[]> {
   const retryDelays = [0, 350, 900];
   let lastError: unknown = null;
@@ -565,7 +589,7 @@ async function fetchConversationOutlineWithRetry(
     }
 
     try {
-      return await fetchConversationOutline(conversationId, signal);
+      return await fetchConversationOutline(conversationId, signal, minCapturedAt);
     } catch (error) {
       if (signal.aborted) {
         throw error;
@@ -672,29 +696,68 @@ function visibleOutlineItems(items: OutlineItem[], expandedIds: ReadonlySet<stri
   return visibleItems;
 }
 
-function useConversationId(): string | null {
-  const [conversationId, setConversationId] = useState(conversationIdFromLocation);
+function useConversationLocation(): ConversationLocation {
+  const [location, setLocation] = useState<ConversationLocation>(() => ({
+    conversationId: conversationIdFromLocation(),
+    changedAt: Date.now() - 1_500
+  }));
 
   useEffect(() => {
-    const update = () => setConversationId(conversationIdFromLocation());
-    const timer = window.setInterval(update, 700);
+    const update = (changedAt = Date.now()) => {
+      const conversationId = conversationIdFromLocation();
+      setLocation((current) =>
+        current.conversationId === conversationId
+          ? current
+          : {
+              conversationId,
+              changedAt
+            }
+      );
+    };
+    const handleLocationMessage = (event: MessageEvent) => {
+      if (event.source !== window || event.origin !== window.location.origin || !isRecord(event.data)) {
+        return;
+      }
 
-    window.addEventListener("popstate", update);
-    window.addEventListener("hashchange", update);
+      if (event.data.source !== locationChangeSource) {
+        return;
+      }
+
+      const href = typeof event.data.href === "string" ? event.data.href : window.location.href;
+      const changedAt = typeof event.data.changedAt === "number" ? event.data.changedAt : Date.now();
+      const conversationId = conversationIdFromUrl(href);
+      setLocation((current) =>
+        current.conversationId === conversationId
+          ? current
+          : {
+              conversationId,
+              changedAt
+            }
+      );
+    };
+    const updateFromWindow = () => update();
+    const updateFromPoll = () => update(Date.now() - 250);
+    const timer = window.setInterval(updateFromPoll, 250);
+
+    window.addEventListener("message", handleLocationMessage);
+    window.addEventListener("popstate", updateFromWindow);
+    window.addEventListener("hashchange", updateFromWindow);
     update();
 
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener("popstate", update);
-      window.removeEventListener("hashchange", update);
+      window.removeEventListener("message", handleLocationMessage);
+      window.removeEventListener("popstate", updateFromWindow);
+      window.removeEventListener("hashchange", updateFromWindow);
     };
   }, []);
 
-  return conversationId;
+  return location;
 }
 
 export function ConversationOutline(): ReactElement | null {
-  const conversationId = useConversationId();
+  const conversationLocation = useConversationLocation();
+  const { conversationId } = conversationLocation;
   const [source, setSource] = useState<OutlineSource>({ conversationId: null, mode: "api", items: [] });
   const [items, setItems] = useState<OutlineItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
@@ -712,7 +775,7 @@ export function ConversationOutline(): ReactElement | null {
     setItems([]);
     setActiveId(null);
 
-    fetchConversationOutlineWithRetry(conversationId, controller.signal)
+    fetchConversationOutlineWithRetry(conversationId, controller.signal, conversationLocation.changedAt)
       .then((outlineItems) => {
         if (!controller.signal.aborted) {
           setSource({
@@ -729,7 +792,7 @@ export function ConversationOutline(): ReactElement | null {
       });
 
     return () => controller.abort();
-  }, [conversationId]);
+  }, [conversationId, conversationLocation.changedAt]);
 
   useEffect(() => {
     setExpandedIds(new Set());
@@ -762,7 +825,7 @@ export function ConversationOutline(): ReactElement | null {
       }
 
       refreshing = true;
-      fetchConversationOutlineWithRetry(conversationId, controller.signal)
+      fetchConversationOutlineWithRetry(conversationId, controller.signal, Date.now() - 250)
         .then((outlineItems) => {
           if (!controller.signal.aborted && outlineItems.length > 0) {
             setSource({ conversationId, mode: "api", items: outlineItems });
@@ -788,7 +851,7 @@ export function ConversationOutline(): ReactElement | null {
       controller.abort();
       observer.disconnect();
     };
-  }, [conversationId, source]);
+  }, [conversationId, conversationLocation.changedAt, source]);
 
   useEffect(() => {
     const observableItems = renderedItems.filter((item) => item.element);
@@ -841,7 +904,7 @@ export function ConversationOutline(): ReactElement | null {
     scrollToOutlineItem(items, item.originalIndex);
   };
 
-  if (items.length === 0) {
+  if (source.conversationId !== conversationId || items.length === 0) {
     return null;
   }
 
