@@ -1,0 +1,14 @@
+.DS_Store
+node_modules
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.crx
+web-ext-artifacts
+.idea
+.vscode
