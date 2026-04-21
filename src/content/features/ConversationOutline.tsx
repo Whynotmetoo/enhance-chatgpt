@@ -660,7 +660,11 @@ function visibleOutlineItems(items: OutlineItem[], expandedIds: ReadonlySet<stri
       ancestors.pop();
     }
 
-    const visible = item.level <= 1 || (ancestors.length > 0 && ancestors.every((ancestor) => ancestor.expanded));
+    const hasAncestor = ancestors.length > 0;
+    const visible =
+      item.level <= 1 ||
+      (!hasAncestor && visibleItems.length === 0) ||
+      (hasAncestor && ancestors.every((ancestor) => ancestor.expanded));
     const hasChildren = itemHasChildren(items, index);
 
     if (visible) {
