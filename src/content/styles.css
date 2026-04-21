@@ -333,12 +333,9 @@
 .ecg-outline-item {
   align-items: center;
   background: transparent;
-  border: 0;
   border-radius: 7px;
   color: inherit;
-  cursor: pointer;
   display: flex;
-  font: inherit;
   font-size: 12px;
   gap: 7px;
   line-height: 1.35;
@@ -351,12 +348,23 @@
 }
 
 .ecg-outline-label {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 1 auto;
+  font: inherit;
+  font-weight: inherit;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  padding: 0;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ecg-outline-item:hover {
+.ecg-outline-label:hover {
   color: var(--ecg-text);
 }
 
@@ -367,11 +375,17 @@
 
 .ecg-outline-disclosure {
   align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: default;
   display: inline-flex;
   flex: 0 0 10px;
+  font: inherit;
   height: 10px;
   justify-content: center;
   opacity: 0;
+  padding: 0;
   transition: opacity 160ms ease, transform 160ms ease;
   width: 10px;
 }
@@ -386,10 +400,11 @@
 }
 
 .ecg-outline-item[data-has-children="true"] .ecg-outline-disclosure {
+  cursor: pointer;
   opacity: 0.7;
 }
 
-.ecg-outline-item[aria-expanded="true"] .ecg-outline-disclosure {
+.ecg-outline-disclosure[aria-expanded="true"] {
   transform: rotate(90deg);
 }
 
