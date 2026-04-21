@@ -887,21 +887,17 @@ export function ConversationOutline(): ReactElement | null {
     return () => observer.disconnect();
   }, [renderedItems]);
 
-  const handleOutlineItemClick = (item: RenderedOutlineItem) => {
-    if (item.hasChildren) {
-      setExpandedIds((current) => {
-        const next = new Set(current);
-        if (next.has(item.id)) {
-          next.delete(item.id);
-        } else {
-          next.add(item.id);
-        }
+  const toggleOutlineItem = (item: RenderedOutlineItem) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
 
-        return next;
-      });
-    }
-
-    scrollToOutlineItem(items, item.originalIndex);
+      return next;
+    });
   };
 
   if (source.conversationId !== conversationId || items.length === 0) {
@@ -910,22 +906,35 @@ export function ConversationOutline(): ReactElement | null {
 
   return (
     <nav aria-label="Conversation outline" className="ecg-outline">
-      {renderedItems.map((item) => (
-        <button
-          aria-expanded={item.hasChildren ? expandedIds.has(item.id) : undefined}
-          className="ecg-outline-item"
-          data-active={activeId === item.id}
-          data-has-children={item.hasChildren}
-          data-kind={item.kind}
-          key={item.id}
-          style={{ "--ecg-depth": Math.max(item.level - 1, 0) } as OutlineDepthStyle}
-          type="button"
-          onClick={() => handleOutlineItemClick(item)}
-        >
-          <span className="ecg-outline-disclosure" />
-          <span className="ecg-outline-label">{item.label}</span>
-        </button>
-      ))}
+      {renderedItems.map((item) => {
+        const isExpanded = expandedIds.has(item.id);
+
+        return (
+          <div
+            className="ecg-outline-item"
+            data-active={activeId === item.id}
+            data-has-children={item.hasChildren}
+            data-kind={item.kind}
+            key={item.id}
+            style={{ "--ecg-depth": Math.max(item.level - 1, 0) } as OutlineDepthStyle}
+          >
+            {item.hasChildren ? (
+              <button
+                aria-expanded={isExpanded}
+                aria-label={`${isExpanded ? "Collapse" : "Expand"} ${item.label}`}
+                className="ecg-outline-disclosure"
+                type="button"
+                onClick={() => toggleOutlineItem(item)}
+              />
+            ) : (
+              <span aria-hidden="true" className="ecg-outline-disclosure" />
+            )}
+            <button className="ecg-outline-label" type="button" onClick={() => scrollToOutlineItem(items, item.originalIndex)}>
+              {item.label}
+            </button>
+          </div>
+        );
+      })}
     </nav>
   );
 }
