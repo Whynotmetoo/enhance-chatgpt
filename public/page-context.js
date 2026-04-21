@@ -8,11 +8,56 @@
 
   const requestSource = "enhance-chatgpt:fetch-conversation";
   const responseSource = "enhance-chatgpt:fetch-conversation-response";
+  const locationChangeSource = "enhance-chatgpt:location-changed";
   const conversationCache = new Map();
   const pendingConversations = new Map();
+  let lastHref = window.location.href;
 
   function postResponse(payload) {
     window.postMessage({ source: responseSource, ...payload }, window.location.origin);
+  }
+
+  function postLocationChanged(changedAt = Date.now()) {
+    if (lastHref === window.location.href) {
+      return;
+    }
+
+    lastHref = window.location.href;
+    window.postMessage(
+      {
+        source: locationChangeSource,
+        href: lastHref,
+        changedAt
+      },
+      window.location.origin
+    );
+  }
+
+  function scheduleLocationChanged(changedAt = Date.now()) {
+    if (typeof window.queueMicrotask === "function") {
+      window.queueMicrotask(() => postLocationChanged(changedAt));
+      return;
+    }
+
+    window.setTimeout(() => postLocationChanged(changedAt), 0);
+  }
+
+  function installLocationObserver() {
+    ["pushState", "replaceState"].forEach((methodName) => {
+      const originalMethod = window.history[methodName];
+      if (typeof originalMethod !== "function") {
+        return;
+      }
+
+      window.history[methodName] = function enhanceChatGPTHistoryMethod() {
+        const result = originalMethod.apply(this, arguments);
+        scheduleLocationChanged(Date.now());
+        return result;
+      };
+    });
+
+    window.addEventListener("popstate", () => scheduleLocationChanged());
+    window.addEventListener("hashchange", () => scheduleLocationChanged());
   }
 
   function conversationIdFromInput(input, init) {
@@ -142,6 +187,8 @@
   } catch {
     window.fetch = wrappedFetch;
   }
+
+  installLocationObserver();
 
   async function sendCachedConversation(requestId, conversationId, minCapturedAt) {
     try {

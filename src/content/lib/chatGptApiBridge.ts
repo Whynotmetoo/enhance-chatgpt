@@ -68,7 +68,11 @@ export function installChatGptApiBridge(): void {
   injectPageContextBridge();
 }
 
-export function fetchConversationInPageContext(conversationId: string, signal: AbortSignal): Promise<unknown> {
+export function fetchConversationInPageContext(
+  conversationId: string,
+  signal: AbortSignal,
+  minCapturedAt: number
+): Promise<unknown> {
   installChatGptApiBridge();
 
   if (signal.aborted) {
@@ -121,7 +125,7 @@ export function fetchConversationInPageContext(conversationId: string, signal: A
         source: requestSource,
         requestId,
         conversationId,
-        minCapturedAt: Date.now() - 1_500
+        minCapturedAt
       },
       window.location.origin
     );
