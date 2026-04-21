@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { fetchConversationInPageContext } from "../lib/chatGptApiBridge";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 
 type OutlineKind = "user" | "assistant" | "heading";
@@ -16,6 +17,7 @@ type OutlineItem = {
 };
 
 type OutlineSource = {
+  conversationId: string | null;
   mode: OutlineMode;
   items: OutlineItem[];
 };
@@ -531,17 +533,7 @@ function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] 
 }
 
 async function fetchConversationOutline(conversationId: string, signal: AbortSignal): Promise<OutlineItem[]> {
-  const response = await fetch(`/backend-api/conversation/${encodeURIComponent(conversationId)}`, {
-    cache: "no-store",
-    credentials: "include",
-    signal
-  });
-
-  if (!response.ok) {
-    throw new Error(`Conversation request failed: ${response.status}`);
-  }
-
-  const conversation = (await response.json()) as ApiConversation;
+  const conversation = (await fetchConversationInPageContext(conversationId, signal)) as ApiConversation;
   return itemsFromApiConversation(conversation);
 }
 
@@ -703,7 +695,7 @@ function useConversationId(): string | null {
 
 export function ConversationOutline(): ReactElement | null {
   const conversationId = useConversationId();
-  const [source, setSource] = useState<OutlineSource>({ mode: "api", items: [] });
+  const [source, setSource] = useState<OutlineSource>({ conversationId: null, mode: "api", items: [] });
   const [items, setItems] = useState<OutlineItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -711,16 +703,20 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     if (!conversationId) {
-      setSource({ mode: "dom", items: collectDomOutlineItems() });
+      setSource({ conversationId: null, mode: "dom", items: collectDomOutlineItems() });
       return;
     }
 
     const controller = new AbortController();
+    setSource({ conversationId, mode: "api", items: [] });
+    setItems([]);
+    setActiveId(null);
 
     fetchConversationOutlineWithRetry(conversationId, controller.signal)
       .then((outlineItems) => {
         if (!controller.signal.aborted) {
           setSource({
+            conversationId,
             mode: outlineItems.length > 0 ? "api" : "dom",
             items: outlineItems.length > 0 ? outlineItems : collectDomOutlineItems()
           });
@@ -728,7 +724,7 @@ export function ConversationOutline(): ReactElement | null {
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setSource({ mode: "dom", items: collectDomOutlineItems() });
+          setSource({ conversationId, mode: "dom", items: collectDomOutlineItems() });
         }
       });
 
@@ -740,6 +736,11 @@ export function ConversationOutline(): ReactElement | null {
   }, [conversationId]);
 
   useEffect(() => {
+    if (source.conversationId !== conversationId) {
+      setItems([]);
+      return;
+    }
+
     if (source.mode === "dom") {
       const update = () => setItems(collectDomOutlineItems());
       const scheduleUpdate = debounce(update, 150);
@@ -764,7 +765,7 @@ export function ConversationOutline(): ReactElement | null {
       fetchConversationOutlineWithRetry(conversationId, controller.signal)
         .then((outlineItems) => {
           if (!controller.signal.aborted && outlineItems.length > 0) {
-            setSource({ mode: "api", items: outlineItems });
+            setSource({ conversationId, mode: "api", items: outlineItems });
           }
         })
         .catch(() => {

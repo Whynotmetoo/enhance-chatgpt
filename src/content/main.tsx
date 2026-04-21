@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import { EnhancementRoot } from "./components/EnhancementRoot";
 import "./styles.css";
 import { EXTENSION_NAMESPACE } from "../shared/constants";
+import { installChatGptApiBridge } from "./lib/chatGptApiBridge";
 
 const rootId = `${EXTENSION_NAMESPACE}-root`;
+
+installChatGptApiBridge();
 
 function mount(): void {
   if (document.getElementById(rootId)) {
