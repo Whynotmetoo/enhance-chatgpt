@@ -9,7 +9,7 @@
     "build": "npm run typecheck && npm run build:content && npm run build:pages && npm run verify:bundle",
     "build:content": "vite build --config vite.content.config.ts",
     "build:pages": "vite build --config vite.config.ts",
-    "verify:bundle": "if rg -q \"process\\\\.env|NODE_ENV\" dist/assets/*.js; then echo \"Unexpected Node env reference in browser bundle\" >&2; exit 1; fi",
+    "verify:bundle": "node scripts/verify-browser-bundle.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
