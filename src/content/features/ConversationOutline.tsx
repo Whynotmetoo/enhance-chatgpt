@@ -460,6 +460,16 @@ function messageId(message: ApiMessage, fallback: string): string {
   return stringValue(message.id) ?? fallback;
 }
 
+function conversationRequestHeaders(conversationId: string): HeadersInit {
+  const path = `/backend-api/conversation/${encodeURIComponent(conversationId)}`;
+
+  return {
+    "oai-language": navigator.language || "en-US",
+    "x-openai-target-path": path,
+    "x-openai-target-route": "/backend-api/conversation/{conversation_id}"
+  };
+}
+
 function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] {
   const items: OutlineItem[] = [];
   let userIndex = 0;
@@ -534,6 +544,7 @@ async function fetchConversationOutline(conversationId: string, signal: AbortSig
   const response = await fetch(`/backend-api/conversation/${encodeURIComponent(conversationId)}`, {
     cache: "no-store",
     credentials: "include",
+    headers: conversationRequestHeaders(conversationId),
     signal
   });
 
