@@ -1,0 +1,391 @@
+:root {
+  --ecg-surface: color-mix(in srgb, Canvas 94%, transparent);
+  --ecg-surface-strong: color-mix(in srgb, Canvas 98%, transparent);
+  --ecg-text: color-mix(in srgb, CanvasText 86%, transparent);
+  --ecg-text-muted: color-mix(in srgb, CanvasText 54%, transparent);
+  --ecg-text-soft: color-mix(in srgb, CanvasText 38%, transparent);
+  --ecg-line: color-mix(in srgb, CanvasText 11%, transparent);
+  --ecg-hover: color-mix(in srgb, CanvasText 7%, transparent);
+  --ecg-shadow: 0 12px 34px color-mix(in srgb, CanvasText 13%, transparent);
+  --ecg-focus: #10a37f;
+}
+
+#enhance-chatgpt-root {
+  color: var(--ecg-text);
+  font: inherit;
+  pointer-events: none;
+  position: relative;
+  z-index: 2147483200;
+}
+
+.ecg-conversation-row {
+  position: relative !important;
+}
+
+.ecg-conversation-checkbox {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ecg-text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  left: 7px;
+  opacity: 0;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: opacity 180ms ease, color 180ms ease, background-color 180ms ease;
+  width: 24px;
+  z-index: 3;
+}
+
+.ecg-conversation-checkbox-mark {
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  display: block;
+  height: 14px;
+  position: relative;
+  width: 14px;
+}
+
+.ecg-conversation-checkbox[data-selected="true"] {
+  color: var(--ecg-focus);
+  opacity: 1;
+}
+
+.ecg-conversation-checkbox[data-selected="true"] .ecg-conversation-checkbox-mark::after {
+  border-bottom: 1.8px solid currentColor;
+  border-right: 1.8px solid currentColor;
+  content: "";
+  height: 7px;
+  left: 4px;
+  position: absolute;
+  top: 1px;
+  transform: rotate(42deg);
+  width: 4px;
+}
+
+.ecg-conversation-row:hover .ecg-conversation-checkbox,
+:root[data-ecg-selection-active] .ecg-conversation-checkbox {
+  opacity: 1;
+}
+
+.ecg-conversation-checkbox:hover {
+  background: var(--ecg-hover);
+  color: var(--ecg-text);
+}
+
+.ecg-conversation-row-selected {
+  background: color-mix(in srgb, var(--ecg-focus) 8%, transparent) !important;
+}
+
+.ecg-action-bar {
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: var(--ecg-surface);
+  border: 1px solid var(--ecg-line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 9%, transparent);
+  box-sizing: border-box;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  pointer-events: auto;
+  position: fixed;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 2147483201;
+}
+
+.ecg-action-count {
+  color: var(--ecg-text-muted);
+  font-size: 12px;
+  min-width: 26px;
+  padding: 0 4px 0 6px;
+}
+
+.ecg-action-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ecg-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 160ms ease, color 160ms ease;
+  width: 28px;
+}
+
+.ecg-action-button:hover,
+.ecg-action-button[aria-expanded="true"] {
+  background: var(--ecg-hover);
+  color: var(--ecg-text);
+}
+
+.ecg-more-wrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.ecg-more-menu {
+  background: var(--ecg-surface-strong);
+  border: 1px solid var(--ecg-line);
+  border-radius: 10px;
+  box-shadow: var(--ecg-shadow);
+  min-width: 190px;
+  padding: 5px;
+  position: absolute;
+  right: 0;
+  top: 34px;
+}
+
+.ecg-more-menu a {
+  border-radius: 7px;
+  color: var(--ecg-text);
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 8px 9px;
+  text-decoration: none;
+}
+
+.ecg-more-menu a:hover {
+  background: var(--ecg-hover);
+}
+
+.ecg-prompt-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ecg-text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  margin-left: -14px;
+  margin-top: -14px;
+  opacity: 0.72;
+  padding: 0;
+  pointer-events: auto;
+  position: fixed;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+  width: 28px;
+  z-index: 2147483202;
+}
+
+.ecg-prompt-trigger:hover,
+.ecg-prompt-trigger[aria-expanded="true"] {
+  background: var(--ecg-hover);
+  color: var(--ecg-text);
+  opacity: 1;
+}
+
+.ecg-prompt-panel {
+  background: var(--ecg-surface-strong);
+  border: 1px solid var(--ecg-line);
+  border-radius: 18px;
+  box-shadow: var(--ecg-shadow);
+  box-sizing: border-box;
+  max-height: min(420px, calc(100vh - 180px));
+  overflow: hidden;
+  pointer-events: auto;
+  position: fixed;
+  transform: translateY(-100%);
+  z-index: 2147483202;
+}
+
+.ecg-prompt-list {
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 7px;
+}
+
+.ecg-prompt-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  color: var(--ecg-text);
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 10px;
+  text-align: left;
+  transition: background-color 160ms ease;
+  width: 100%;
+}
+
+.ecg-prompt-item:hover,
+.ecg-prompt-item[aria-selected="true"] {
+  background: var(--ecg-hover);
+}
+
+.ecg-prompt-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ecg-prompt-title,
+.ecg-prompt-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ecg-prompt-title {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.ecg-prompt-preview {
+  color: var(--ecg-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ecg-prompt-delete {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ecg-text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 160ms ease, background-color 160ms ease, color 160ms ease;
+  width: 28px;
+}
+
+.ecg-prompt-item:hover .ecg-prompt-delete,
+.ecg-prompt-delete:focus-visible {
+  opacity: 1;
+}
+
+.ecg-prompt-delete:hover {
+  background: var(--ecg-hover);
+  color: var(--ecg-text);
+}
+
+.ecg-prompt-empty {
+  color: var(--ecg-text-muted);
+  font-size: 13px;
+  padding: 18px 12px;
+}
+
+.ecg-prompt-footer {
+  border-top: 1px solid var(--ecg-line);
+  padding: 7px;
+}
+
+.ecg-save-prompt {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  color: var(--ecg-text);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  height: 40px;
+  justify-content: center;
+  padding: 0 12px;
+  transition: background-color 160ms ease;
+  width: 100%;
+}
+
+.ecg-save-prompt:hover {
+  background: var(--ecg-hover);
+}
+
+.ecg-outline {
+  box-sizing: border-box;
+  color: var(--ecg-text-muted);
+  display: grid;
+  gap: 2px;
+  max-height: calc(100vh - 156px);
+  overflow: hidden auto;
+  padding: 4px 0;
+  pointer-events: auto;
+  position: fixed;
+  right: 24px;
+  scrollbar-width: thin;
+  top: 86px;
+  width: clamp(178px, calc((100vw - 980px) / 2 - 48px), 268px);
+  z-index: 2147483199;
+}
+
+.ecg-outline-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 12px;
+  gap: 7px;
+  line-height: 1.35;
+  min-height: 28px;
+  opacity: 0.64;
+  overflow: hidden;
+  padding: 4px 6px 4px calc(6px + var(--ecg-depth) * 10px);
+  text-align: left;
+  transition: opacity 170ms ease, background-color 170ms ease, color 170ms ease;
+  width: 100%;
+}
+
+.ecg-outline-item span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ecg-outline-item:hover {
+  background: var(--ecg-hover);
+  opacity: 0.9;
+}
+
+.ecg-outline-item[data-active="true"] {
+  color: var(--ecg-text);
+  opacity: 1;
+}
+
+.ecg-outline-item[data-kind="user"] {
+  color: var(--ecg-text);
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.ecg-outline-item[data-kind="assistant"] {
+  opacity: 0.78;
+}
+
+.ecg-outline-dot {
+  background: currentColor;
+  border-radius: 999px;
+  height: 4px;
+  opacity: 0.62;
+  width: 4px;
+}
+
+@media (max-width: 1200px) {
+  .ecg-outline {
+    display: none;
+  }
+}
