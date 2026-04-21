@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 
 type OutlineKind = "user" | "assistant" | "heading";
@@ -18,6 +18,11 @@ type OutlineItem = {
 type OutlineSource = {
   mode: OutlineMode;
   items: OutlineItem[];
+};
+
+type RenderedOutlineItem = OutlineItem & {
+  hasChildren: boolean;
+  originalIndex: number;
 };
 
 type OutlineDepthStyle = CSSProperties & {
@@ -119,6 +124,10 @@ function collectTurnElements(): HTMLElement[] {
   });
 
   return Array.from(elements).sort(compareDocumentOrder);
+}
+
+function conversationMutationRoot(): HTMLElement {
+  return document.querySelector<HTMLElement>("#thread") ?? document.querySelector<HTMLElement>("main") ?? document.body;
 }
 
 function conversationIdFromLocation(): string | null {
@@ -387,8 +396,35 @@ function rootNodeIds(mapping: Map<string, ApiMappingNode>): string[] {
   return roots.length > 0 ? roots : Array.from(mapping.keys());
 }
 
+function currentNodePath(conversation: ApiConversation, mapping: Map<string, ApiMappingNode>): string[] {
+  const currentNodeId = stringValue(conversation.current_node);
+  if (!currentNodeId || !mapping.has(currentNodeId)) {
+    return [];
+  }
+
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let nodeId: string | null = currentNodeId;
+
+  while (nodeId && mapping.has(nodeId) && !seen.has(nodeId)) {
+    seen.add(nodeId);
+    path.push(nodeId);
+    nodeId = stringValue(mapping.get(nodeId)?.parent);
+  }
+
+  return path.reverse();
+}
+
 function orderedApiMessages(conversation: ApiConversation): ApiMessage[] {
   const mapping = apiMapping(conversation);
+  const currentPathMessages = currentNodePath(conversation, mapping)
+    .map((nodeId) => mapping.get(nodeId)?.message)
+    .filter(isRecord) as ApiMessage[];
+
+  if (currentPathMessages.length > 0) {
+    return currentPathMessages;
+  }
+
   const seen = new Set<string>();
   const orderedMessages: ApiMessage[] = [];
 
@@ -412,14 +448,12 @@ function orderedApiMessages(conversation: ApiConversation): ApiMessage[] {
 
   rootNodeIds(mapping).forEach(visit);
 
-  if (orderedMessages.length > 0) {
-    return orderedMessages;
-  }
+  const unvisitedMessages = Array.from(mapping.entries())
+    .filter(([id, node]) => !seen.has(id) && isRecord(node.message))
+    .map(([, node]) => node.message as ApiMessage)
+    .sort((a, b) => numberValue(a.create_time) - numberValue(b.create_time));
 
-  return Array.from(mapping.values())
-    .map((node) => node.message)
-    .filter(isRecord)
-    .sort((a, b) => numberValue(a.create_time) - numberValue(b.create_time)) as ApiMessage[];
+  return [...orderedMessages, ...unvisitedMessages];
 }
 
 function messageId(message: ApiMessage, fallback: string): string {
@@ -511,6 +545,47 @@ async function fetchConversationOutline(conversationId: string, signal: AbortSig
   return itemsFromApiConversation(conversation);
 }
 
+function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new Error("Conversation request aborted"));
+      },
+      { once: true }
+    );
+  });
+}
+
+async function fetchConversationOutlineWithRetry(
+  conversationId: string,
+  signal: AbortSignal
+): Promise<OutlineItem[]> {
+  const retryDelays = [0, 350, 900];
+  let lastError: unknown = null;
+
+  for (const delay of retryDelays) {
+    if (delay > 0) {
+      await waitForRetry(delay, signal);
+    }
+
+    try {
+      return await fetchConversationOutline(conversationId, signal);
+    } catch (error) {
+      if (signal.aborted) {
+        throw error;
+      }
+
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Conversation request failed");
+}
+
 function findMessageElement(messageId: string): HTMLElement | null {
   const escaped = cssEscape(messageId);
   const message = document.querySelector<HTMLElement>(`[data-message-id="${escaped}"]`);
@@ -571,6 +646,40 @@ function scrollToOutlineItem(items: OutlineItem[], index: number): void {
   element?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function itemHasChildren(items: OutlineItem[], index: number): boolean {
+  const nextItem = items[index + 1];
+  return nextItem ? nextItem.level > items[index].level : false;
+}
+
+function visibleOutlineItems(items: OutlineItem[], expandedIds: ReadonlySet<string>): RenderedOutlineItem[] {
+  const visibleItems: RenderedOutlineItem[] = [];
+  const ancestors: Array<{ level: number; expanded: boolean }> = [];
+
+  items.forEach((item, index) => {
+    while (ancestors.length > 0 && ancestors[ancestors.length - 1].level >= item.level) {
+      ancestors.pop();
+    }
+
+    const hasAncestor = ancestors.length > 0;
+    const visible =
+      item.level <= 1 ||
+      (!hasAncestor && visibleItems.length === 0) ||
+      (hasAncestor && ancestors.every((ancestor) => ancestor.expanded));
+    const hasChildren = itemHasChildren(items, index);
+
+    if (visible) {
+      visibleItems.push({ ...item, hasChildren, originalIndex: index });
+    }
+
+    ancestors.push({
+      level: item.level,
+      expanded: expandedIds.has(item.id)
+    });
+  });
+
+  return visibleItems;
+}
+
 function useConversationId(): string | null {
   const [conversationId, setConversationId] = useState(conversationIdFromLocation);
 
@@ -596,7 +705,9 @@ export function ConversationOutline(): ReactElement | null {
   const conversationId = useConversationId();
   const [source, setSource] = useState<OutlineSource>({ mode: "api", items: [] });
   const [items, setItems] = useState<OutlineItem[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -606,7 +717,7 @@ export function ConversationOutline(): ReactElement | null {
 
     const controller = new AbortController();
 
-    fetchConversationOutline(conversationId, controller.signal)
+    fetchConversationOutlineWithRetry(conversationId, controller.signal)
       .then((outlineItems) => {
         if (!controller.signal.aborted) {
           setSource({
@@ -625,29 +736,61 @@ export function ConversationOutline(): ReactElement | null {
   }, [conversationId]);
 
   useEffect(() => {
+    setExpandedIds(new Set());
+  }, [conversationId]);
+
+  useEffect(() => {
     if (source.mode === "dom") {
       const update = () => setItems(collectDomOutlineItems());
       const scheduleUpdate = debounce(update, 150);
       const observer = new MutationObserver(scheduleUpdate);
 
       update();
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
       return () => observer.disconnect();
     }
 
     const update = () => setItems(bindOutlineItems(source.items));
     const scheduleUpdate = debounce(update, 150);
-    const observer = new MutationObserver(scheduleUpdate);
+    const controller = new AbortController();
+    let refreshing = false;
+    const refresh = () => {
+      if (!conversationId || refreshing) {
+        return;
+      }
+
+      refreshing = true;
+      fetchConversationOutlineWithRetry(conversationId, controller.signal)
+        .then((outlineItems) => {
+          if (!controller.signal.aborted && outlineItems.length > 0) {
+            setSource({ mode: "api", items: outlineItems });
+          }
+        })
+        .catch(() => {
+          // Keep the current API outline; transient refresh failures should not downgrade to partial DOM data.
+        })
+        .finally(() => {
+          refreshing = false;
+        });
+    };
+    const scheduleRefresh = debounce(refresh, 900);
+    const observer = new MutationObserver(() => {
+      scheduleUpdate();
+      scheduleRefresh();
+    });
 
     update();
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
-    return () => observer.disconnect();
-  }, [source]);
+    return () => {
+      controller.abort();
+      observer.disconnect();
+    };
+  }, [conversationId, source]);
 
   useEffect(() => {
-    const observableItems = items.filter((item) => item.element);
+    const observableItems = renderedItems.filter((item) => item.element);
     if (observableItems.length === 0) {
       setActiveId(null);
       return;
@@ -678,7 +821,24 @@ export function ConversationOutline(): ReactElement | null {
     });
 
     return () => observer.disconnect();
-  }, [items]);
+  }, [renderedItems]);
+
+  const handleOutlineItemClick = (item: RenderedOutlineItem) => {
+    if (item.hasChildren) {
+      setExpandedIds((current) => {
+        const next = new Set(current);
+        if (next.has(item.id)) {
+          next.delete(item.id);
+        } else {
+          next.add(item.id);
+        }
+
+        return next;
+      });
+    }
+
+    scrollToOutlineItem(items, item.originalIndex);
+  };
 
   if (items.length === 0) {
     return null;
@@ -686,18 +846,21 @@ export function ConversationOutline(): ReactElement | null {
 
   return (
     <nav aria-label="Conversation outline" className="ecg-outline">
-      {items.map((item) => (
+      {renderedItems.map((item) => (
         <button
+          aria-expanded={item.hasChildren ? expandedIds.has(item.id) : undefined}
           className="ecg-outline-item"
           data-active={activeId === item.id}
+          data-has-children={item.hasChildren}
           data-kind={item.kind}
           key={item.id}
           style={{ "--ecg-depth": Math.max(item.level - 1, 0) } as OutlineDepthStyle}
           type="button"
-          onClick={() => scrollToOutlineItem(items, items.indexOf(item))}
+          onClick={() => handleOutlineItemClick(item)}
         >
+          <span className="ecg-outline-disclosure" />
           <span className="ecg-outline-dot" />
-          <span>{item.label}</span>
+          <span className="ecg-outline-label">{item.label}</span>
         </button>
       ))}
     </nav>

@@ -318,6 +318,7 @@
   display: grid;
   gap: 2px;
   max-height: calc(100vh - 156px);
+  overscroll-behavior: contain;
   overflow: hidden auto;
   padding: 4px 0;
   pointer-events: auto;
@@ -350,7 +351,7 @@
   width: 100%;
 }
 
-.ecg-outline-item span:last-child {
+.ecg-outline-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -379,9 +380,38 @@
 .ecg-outline-dot {
   background: currentColor;
   border-radius: 999px;
+  flex: 0 0 auto;
   height: 4px;
   opacity: 0.62;
   width: 4px;
+}
+
+.ecg-outline-disclosure {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 10px;
+  height: 10px;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+  width: 10px;
+}
+
+.ecg-outline-disclosure::before {
+  border-color: transparent transparent transparent currentColor;
+  border-style: solid;
+  border-width: 4px 0 4px 5px;
+  content: "";
+  height: 0;
+  width: 0;
+}
+
+.ecg-outline-item[data-has-children="true"] .ecg-outline-disclosure {
+  opacity: 0.7;
+}
+
+.ecg-outline-item[aria-expanded="true"] .ecg-outline-disclosure {
+  transform: rotate(90deg);
 }
 
 @media (max-width: 1200px) {
