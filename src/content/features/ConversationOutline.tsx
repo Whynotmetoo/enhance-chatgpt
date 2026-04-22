@@ -33,7 +33,10 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     if (!conversationId) {
-      setSource({ conversationId: null, mode: "dom", items: collectDomOutlineItems() });
+      setSource({ conversationId: null, mode: "dom", items: [] });
+      setItems([]);
+      setActiveId(null);
+      setPendingScroll(null);
       return;
     }
 
@@ -67,6 +70,11 @@ export function ConversationOutline(): ReactElement | null {
   }, [conversationId]);
 
   useEffect(() => {
+    if (!conversationId) {
+      setItems([]);
+      return;
+    }
+
     if (source.conversationId !== conversationId) {
       setItems([]);
       return;
@@ -247,7 +255,7 @@ export function ConversationOutline(): ReactElement | null {
     );
   };
 
-  if (source.conversationId !== conversationId || items.length === 0 || isRightSidePanelOpen) {
+  if (!conversationId || source.conversationId !== conversationId || items.length === 0 || isRightSidePanelOpen) {
     return null;
   }
 
