@@ -142,43 +142,6 @@
     });
   }
 
-  async function fetchConversation(conversationId) {
-    const response = await window.fetch(`/backend-api/conversation/${encodeURIComponent(conversationId)}`, {
-      credentials: "include"
-    });
-
-    if (!response.ok) {
-      throw new Error(`Conversation request failed: ${response.status}`);
-    }
-
-    const body = await response.json();
-    rememberConversation(conversationId, body);
-    return body;
-  }
-
-  function loadConversation(conversationId, minCapturedAt) {
-    const cached = conversationCache.get(conversationId);
-    if (cached && cached.capturedAt >= minCapturedAt) {
-      return Promise.resolve(cached.body);
-    }
-
-    return new Promise((resolve, reject) => {
-      let rejectedCount = 0;
-      let lastError = null;
-      const handleReject = (error) => {
-        rejectedCount += 1;
-        lastError = error;
-
-        if (rejectedCount === 2) {
-          reject(lastError);
-        }
-      };
-
-      waitForConversation(conversationId, minCapturedAt).then(resolve, handleReject);
-      fetchConversation(conversationId).then(resolve, handleReject);
-    });
-  }
-
   function observeConversationResponse(conversationId, responsePromise) {
     void responsePromise
       .then((response) => {
@@ -229,7 +192,7 @@
 
   async function sendCachedConversation(requestId, conversationId, minCapturedAt) {
     try {
-      const body = await loadConversation(conversationId, minCapturedAt);
+      const body = await waitForConversation(conversationId, minCapturedAt);
 
       postResponse({
         requestId,

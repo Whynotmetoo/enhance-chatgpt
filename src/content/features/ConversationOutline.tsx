@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { debounce } from "../lib/dom";
 import { fetchConversationOutlineWithRetry } from "./conversationOutline/apiOutline";
 import { pendingScrollDelayMs } from "./conversationOutline/constants";
@@ -96,11 +96,13 @@ export function ConversationOutline(): ReactElement | null {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
+  const lastApiItemsRef = useRef<OutlineItem[] | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
   useEffect(() => {
     if (!conversationId) {
+      lastApiItemsRef.current = null;
       setSource({ conversationId: null, mode: "dom", items: [] });
       setItems([]);
       setActiveId(null);
@@ -109,6 +111,7 @@ export function ConversationOutline(): ReactElement | null {
     }
 
     const controller = new AbortController();
+    lastApiItemsRef.current = null;
     setSource({ conversationId, mode: "api", items: [] });
     setItems([]);
     setActiveId(null);
@@ -139,16 +142,19 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     if (!conversationId) {
+      lastApiItemsRef.current = null;
       setItems([]);
       return;
     }
 
     if (source.conversationId !== conversationId) {
+      lastApiItemsRef.current = null;
       setItems([]);
       return;
     }
 
     if (source.mode === "dom") {
+      lastApiItemsRef.current = null;
       const update = () => setItems((currentItems) => mergeOutlineItems(currentItems, collectDomOutlineItems()));
       const scheduleUpdate = debounce(update, 150);
       const observer = new MutationObserver(scheduleUpdate);
@@ -159,7 +165,11 @@ export function ConversationOutline(): ReactElement | null {
       return () => observer.disconnect();
     }
 
-    const update = () => setItems((currentItems) => liveOutlineItems(source.items, currentItems));
+    const update = () => {
+      const apiItemsChanged = lastApiItemsRef.current !== source.items;
+      lastApiItemsRef.current = source.items;
+      setItems((currentItems) => liveOutlineItems(source.items, apiItemsChanged ? [] : currentItems));
+    };
     const scheduleUpdate = debounce(update, 150);
     const controller = new AbortController();
     let refreshing = false;
