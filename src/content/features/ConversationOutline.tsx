@@ -49,9 +49,9 @@ const messageSelector = "[data-message-author-role='user'], [data-message-author
 const answerHeadingSelector = ".markdown :is(h1, h2, h3, h4, h5, h6)";
 const conversationPathPattern = /^\/c\/([^/?#]+)/;
 const locationChangeSource = "enhance-chatgpt:location-changed";
-const maxPendingScrollAttempts = 120;
-const pendingScrollDelayMs = 180;
-const pendingScrollStepRatio = 0.85;
+const maxPendingScrollAttempts = 10;
+const pendingScrollDelayMs = 240;
+const pendingScrollStepRatio = 0.7;
 const pendingScrollMinStep = 480;
 const outlineScrollTopOffset = 90;
 const outlineScrollAlignmentTolerance = 12;
