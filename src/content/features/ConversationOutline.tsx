@@ -22,6 +22,12 @@ type OutlineSource = {
   items: OutlineItem[];
 };
 
+type PendingScroll = {
+  attempts: number;
+  id: string;
+  index: number;
+};
+
 type ConversationLocation = {
   conversationId: string | null;
   changedAt: number;
@@ -43,7 +49,12 @@ const messageSelector = "[data-message-author-role='user'], [data-message-author
 const answerHeadingSelector = ".markdown :is(h1, h2, h3, h4, h5, h6)";
 const conversationPathPattern = /^\/c\/([^/?#]+)/;
 const locationChangeSource = "enhance-chatgpt:location-changed";
+const maxPendingScrollAttempts = 120;
+const pendingScrollDelayMs = 180;
+const pendingScrollStepRatio = 0.85;
+const pendingScrollMinStep = 480;
 const outlineScrollTopOffset = 90;
+const outlineScrollAlignmentTolerance = 12;
 
 type ApiAuthorRole = "user" | "assistant" | "system" | "tool";
 
@@ -67,6 +78,11 @@ type ApiMappingNode = {
 type ApiConversation = {
   current_node?: unknown;
   mapping?: unknown;
+};
+
+type OrderedApiMessage = {
+  nodeId: string;
+  message: ApiMessage;
 };
 
 type MarkdownHeading = {
@@ -410,18 +426,21 @@ function currentNodePath(conversation: ApiConversation, mapping: Map<string, Api
   return path.reverse();
 }
 
-function orderedApiMessages(conversation: ApiConversation): ApiMessage[] {
+function orderedApiMessages(conversation: ApiConversation): OrderedApiMessage[] {
   const mapping = apiMapping(conversation);
   const currentPathMessages = currentNodePath(conversation, mapping)
-    .map((nodeId) => mapping.get(nodeId)?.message)
-    .filter(isRecord) as ApiMessage[];
+    .map((nodeId) => {
+      const message = mapping.get(nodeId)?.message;
+      return isRecord(message) ? { nodeId, message: message as ApiMessage } : null;
+    })
+    .filter((message): message is OrderedApiMessage => message !== null);
 
   if (currentPathMessages.length > 0) {
     return currentPathMessages;
   }
 
   const seen = new Set<string>();
-  const orderedMessages: ApiMessage[] = [];
+  const orderedMessages: OrderedApiMessage[] = [];
 
   const visit = (nodeId: string) => {
     if (seen.has(nodeId)) {
@@ -435,7 +454,7 @@ function orderedApiMessages(conversation: ApiConversation): ApiMessage[] {
 
     seen.add(nodeId);
     if (isRecord(node.message)) {
-      orderedMessages.push(node.message as ApiMessage);
+      orderedMessages.push({ nodeId, message: node.message as ApiMessage });
     }
 
     nodeChildren(node).forEach(visit);
@@ -445,8 +464,8 @@ function orderedApiMessages(conversation: ApiConversation): ApiMessage[] {
 
   const unvisitedMessages = Array.from(mapping.entries())
     .filter(([id, node]) => !seen.has(id) && isRecord(node.message))
-    .map(([, node]) => node.message as ApiMessage)
-    .sort((a, b) => numberValue(a.create_time) - numberValue(b.create_time));
+    .map(([nodeId, node]) => ({ nodeId, message: node.message as ApiMessage }))
+    .sort((a, b) => numberValue(a.message.create_time) - numberValue(b.message.create_time));
 
   return [...orderedMessages, ...unvisitedMessages];
 }
@@ -460,7 +479,7 @@ function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] 
   let userIndex = 0;
   let answerIndex = 0;
 
-  orderedApiMessages(conversation).forEach((message, index) => {
+  orderedApiMessages(conversation).forEach(({ nodeId, message }, index) => {
     if (isHiddenApiMessage(message)) {
       return;
     }
@@ -470,7 +489,7 @@ function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] 
       return;
     }
 
-    const id = messageId(message, `message-${index}`);
+    const id = nodeId || messageId(message, `message-${index}`);
     const text = textFromMessage(message);
 
     if (role === "user") {
@@ -584,6 +603,28 @@ function findMessageElement(messageId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-turn-id="${escaped}"]`);
 }
 
+function exactOutlineElement(item: OutlineItem): HTMLElement | null {
+  if (!item.messageId) {
+    return item.element;
+  }
+
+  const message = findMessageElement(item.messageId);
+  if (!message) {
+    return null;
+  }
+
+  const turn = message.closest<HTMLElement>("[data-turn-id]") ?? message;
+  if (item.headingIndex === null) {
+    return turn;
+  }
+
+  const headings = Array.from(message.querySelectorAll<HTMLElement>(answerHeadingSelector))
+    .filter(isVisible)
+    .sort(compareDocumentOrder);
+
+  return headings[item.headingIndex] ?? null;
+}
+
 function bindOutlineItem(item: OutlineItem): OutlineItem {
   if (!item.messageId) {
     return item;
@@ -611,22 +652,32 @@ function bindOutlineItems(items: OutlineItem[]): OutlineItem[] {
   return items.map(bindOutlineItem);
 }
 
-function nearestMountedElement(items: OutlineItem[], index: number): HTMLElement | null {
+type MountedOutlineAnchor = {
+  element: HTMLElement;
+  index: number;
+};
+
+function connectedElement(element: HTMLElement | null | undefined): HTMLElement | null {
+  return element?.isConnected ? element : null;
+}
+
+function nearestMountedAnchor(items: OutlineItem[], index: number): MountedOutlineAnchor | null {
   for (let cursor = index; cursor >= 0; cursor -= 1) {
-    const element = items[cursor]?.element;
+    const element = connectedElement(items[cursor]?.element);
     if (element) {
-      return element;
+      return { element, index: cursor };
     }
   }
 
   for (let cursor = index + 1; cursor < items.length; cursor += 1) {
-    const element = items[cursor]?.element;
+    const element = connectedElement(items[cursor]?.element);
     if (element) {
-      return element;
+      return { element, index: cursor };
     }
   }
 
-  return document.querySelector<HTMLElement>("#thread") ?? document.querySelector<HTMLElement>("main");
+  const root = document.querySelector<HTMLElement>("#thread") ?? document.querySelector<HTMLElement>("main");
+  return root ? { element: root, index } : null;
 }
 
 function isScrollableElement(element: HTMLElement): boolean {
@@ -644,18 +695,78 @@ function scrollContainerFor(element: HTMLElement): HTMLElement {
   return (document.scrollingElement ?? document.documentElement) as HTMLElement;
 }
 
-function scrollToOutlineItem(items: OutlineItem[], index: number): void {
-  const element = items[index]?.element ?? nearestMountedElement(items, index);
-  if (!element) {
-    return;
-  }
-
-  const container = scrollContainerFor(element);
+function scrollTargetTop(element: HTMLElement, container: HTMLElement): number {
   const elementTop = element.getBoundingClientRect().top;
   const containerTop = container === document.scrollingElement ? 0 : container.getBoundingClientRect().top;
   const top = container.scrollTop + elementTop - containerTop - outlineScrollTopOffset;
 
-  container.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  return clampScrollTop(container, top);
+}
+
+function clampScrollTop(container: HTMLElement, top: number): number {
+  const maxTop = Math.max(container.scrollHeight - container.clientHeight, 0);
+
+  return Math.min(Math.max(top, 0), maxTop);
+}
+
+function isElementScrollAligned(element: HTMLElement, container: HTMLElement): boolean {
+  return Math.abs(container.scrollTop - scrollTargetTop(element, container)) <= outlineScrollAlignmentTolerance;
+}
+
+function scrollElementIntoView(element: HTMLElement, behavior: ScrollBehavior): boolean {
+  const container = scrollContainerFor(element);
+  const isAligned = isElementScrollAligned(element, container);
+
+  if (!isAligned) {
+    container.scrollTo({ top: scrollTargetTop(element, container), behavior });
+  }
+
+  return isAligned;
+}
+
+function scrollTowardAnchor(anchor: MountedOutlineAnchor, targetIndex: number, behavior: ScrollBehavior): void {
+  const container = scrollContainerFor(anchor.element);
+  const direction = anchor.index < targetIndex ? 1 : -1;
+  const step = Math.max(container.clientHeight * pendingScrollStepRatio, pendingScrollMinStep);
+
+  if (anchor.index === targetIndex) {
+    scrollElementIntoView(anchor.element, behavior);
+    return;
+  }
+
+  container.scrollTo({ top: clampScrollTop(container, container.scrollTop + direction * step), behavior });
+}
+
+function scrollToOutlineItem(items: OutlineItem[], index: number, behavior: ScrollBehavior): boolean {
+  const item = items[index];
+  const exactElement = item ? exactOutlineElement(item) : null;
+  if (exactElement) {
+    return scrollElementIntoView(exactElement, behavior);
+  }
+
+  const anchor = nearestMountedAnchor(items, index);
+  if (!anchor) {
+    return false;
+  }
+
+  scrollTowardAnchor(anchor, index, behavior);
+  return false;
+}
+
+function nextPendingScroll(items: OutlineItem[], pendingScroll: PendingScroll): PendingScroll | null {
+  const index = items.findIndex((item) => item.id === pendingScroll.id);
+  const nextIndex = index >= 0 ? index : pendingScroll.index;
+  const reachedExactTarget = scrollToOutlineItem(items, nextIndex, "auto");
+  console.log(pendingScroll.attempts, nextIndex, reachedExactTarget);
+  if (reachedExactTarget || pendingScroll.attempts + 1 >= maxPendingScrollAttempts) {
+    return null;
+  }
+
+  return {
+    ...pendingScroll,
+    attempts: pendingScroll.attempts + 1,
+    index: nextIndex
+  };
 }
 
 function itemHasChildren(items: OutlineItem[], index: number): boolean {
@@ -834,6 +945,7 @@ export function ConversationOutline(): ReactElement | null {
   const [items, setItems] = useState<OutlineItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
@@ -847,6 +959,7 @@ export function ConversationOutline(): ReactElement | null {
     setSource({ conversationId, mode: "api", items: [] });
     setItems([]);
     setActiveId(null);
+    setPendingScroll(null);
 
     fetchConversationOutlineWithRetry(conversationId, controller.signal, conversationLocation.changedAt)
       .then((outlineItems) => {
@@ -985,6 +1098,21 @@ export function ConversationOutline(): ReactElement | null {
     };
   }, [items, renderedItems]);
 
+  useEffect(() => {
+    if (!pendingScroll) {
+      return;
+    }
+
+    const continuePendingScroll = () => {
+      setPendingScroll((current) => (current ? nextPendingScroll(items, current) : null));
+    };
+    const timer = window.setTimeout(continuePendingScroll, pendingScrollDelayMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [items, pendingScroll]);
+
   const toggleOutlineItem = (item: RenderedOutlineItem) => {
     setExpandedIds((current) => {
       const next = new Set(current);
@@ -996,6 +1124,20 @@ export function ConversationOutline(): ReactElement | null {
 
       return next;
     });
+  };
+
+  const handleOutlineItemNavigation = (item: RenderedOutlineItem) => {
+    const reachedExactTarget = scrollToOutlineItem(items, item.originalIndex, "smooth");
+    console.log('trigger navigation to', item.label, reachedExactTarget);
+    setPendingScroll(
+      reachedExactTarget
+        ? null
+        : {
+            attempts: 0,
+            id: item.id,
+            index: item.originalIndex
+          }
+    );
   };
 
   if (source.conversationId !== conversationId || items.length === 0 || isRightSidePanelOpen) {
@@ -1027,7 +1169,7 @@ export function ConversationOutline(): ReactElement | null {
             ) : (
               <span aria-hidden="true" className="ecg-outline-disclosure" />
             )}
-            <button className="ecg-outline-label" type="button" onClick={() => scrollToOutlineItem(items, item.originalIndex)}>
+            <button className="ecg-outline-label" type="button" onClick={() => handleOutlineItemNavigation(item)}>
               {item.label}
             </button>
           </div>
