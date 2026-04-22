@@ -43,6 +43,7 @@ const messageSelector = "[data-message-author-role='user'], [data-message-author
 const answerHeadingSelector = ".markdown :is(h1, h2, h3, h4, h5, h6)";
 const conversationPathPattern = /^\/c\/([^/?#]+)/;
 const locationChangeSource = "enhance-chatgpt:location-changed";
+const outlineScrollTopOffset = 90;
 
 type ApiAuthorRole = "user" | "assistant" | "system" | "tool";
 
@@ -197,52 +198,29 @@ function userLabel(turn: HTMLElement, index: number): string {
   return normalizeLabel(source.textContent, `User message ${index}`);
 }
 
-function assistantSummaryLabel(turn: HTMLElement, index: number): string {
-  const markdowns = Array.from(turn.querySelectorAll<HTMLElement>(".markdown")).filter(isVisible);
-  const source =
-    turn.querySelector<HTMLElement>("[data-turn-start-message='true'] .markdown") ??
-    markdowns[markdowns.length - 1] ??
-    turn.querySelector<HTMLElement>("[data-message-author-role='assistant']") ??
-    turn;
-
-  return normalizeLabel(source.textContent, `ChatGPT response ${index}`);
-}
-
 function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineItem[] {
   const headings = Array.from(turn.querySelectorAll<HTMLElement>(answerHeadingSelector))
     .filter(isVisible)
     .sort(compareDocumentOrder);
-  const firstHeading = headings[0];
 
-  if (!firstHeading) {
-    return [
-      {
-        id: stableOutlineId(turn, "assistant", answerIndex),
-        label: assistantSummaryLabel(turn, answerIndex),
-        level: 2,
-        kind: "assistant",
-        messageId: messageIdFromTurn(turn),
-        headingIndex: null,
-        element: turn
-      }
-    ];
+  if (headings.length === 0) {
+    return [];
   }
 
-  const baseLevel = headingLevel(firstHeading);
+  const topHeadingLevel = Math.min(...headings.map(headingLevel));
 
-  return headings.map((element, structureIndex) => {
-    const level = Math.min(Math.max(headingLevel(element) - baseLevel + 2, 2), 6);
-
-    return {
-      id: stableOutlineId(element, "heading", structureIndex),
+  return headings
+    .map((element, headingIndex) => ({ element, headingIndex }))
+    .filter(({ element }) => headingLevel(element) === topHeadingLevel)
+    .map(({ element, headingIndex }) => ({
+      id: stableOutlineId(element, "heading", headingIndex),
       label: normalizeLabel(element.textContent, `ChatGPT response ${answerIndex}`),
-      level,
+      level: 2,
       kind: "heading",
       messageId: messageIdFromTurn(turn),
-      headingIndex: structureIndex,
+      headingIndex,
       element
-    };
-  });
+    }));
 }
 
 function collectDomOutlineItems(): OutlineItem[] {
@@ -516,26 +494,20 @@ function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] 
 
     answerIndex += 1;
     const headings = markdownHeadings(text);
-    const firstHeading = headings[0];
-
-    if (!firstHeading) {
-      items.push({
-        id: `outline-assistant-${id}`,
-        label: normalizeLabel(text, `ChatGPT response ${answerIndex}`),
-        level: 2,
-        kind: "assistant",
-        messageId: id,
-        headingIndex: null,
-        element: null
-      });
+    if (headings.length === 0) {
       return;
     }
 
+    const topHeadingLevel = Math.min(...headings.map((heading) => heading.level));
     headings.forEach((heading, headingIndex) => {
+      if (heading.level !== topHeadingLevel) {
+        return;
+      }
+
       items.push({
         id: `outline-heading-${id}-${headingIndex}`,
         label: normalizeLabel(heading.label, `ChatGPT response ${answerIndex}`),
-        level: Math.min(Math.max(heading.level - firstHeading.level + 2, 2), 6),
+        level: 2,
         kind: "heading",
         messageId: id,
         headingIndex,
@@ -657,9 +629,33 @@ function nearestMountedElement(items: OutlineItem[], index: number): HTMLElement
   return document.querySelector<HTMLElement>("#thread") ?? document.querySelector<HTMLElement>("main");
 }
 
+function isScrollableElement(element: HTMLElement): boolean {
+  const overflowY = window.getComputedStyle(element).overflowY;
+  return /auto|scroll|overlay/.test(overflowY) && element.scrollHeight > element.clientHeight;
+}
+
+function scrollContainerFor(element: HTMLElement): HTMLElement {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (isScrollableElement(parent)) {
+      return parent;
+    }
+  }
+
+  return (document.scrollingElement ?? document.documentElement) as HTMLElement;
+}
+
 function scrollToOutlineItem(items: OutlineItem[], index: number): void {
   const element = items[index]?.element ?? nearestMountedElement(items, index);
-  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!element) {
+    return;
+  }
+
+  const container = scrollContainerFor(element);
+  const elementTop = element.getBoundingClientRect().top;
+  const containerTop = container === document.scrollingElement ? 0 : container.getBoundingClientRect().top;
+  const top = container.scrollTop + elementTop - containerTop - outlineScrollTopOffset;
+
+  container.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
 }
 
 function itemHasChildren(items: OutlineItem[], index: number): boolean {

@@ -168,8 +168,7 @@ function OutlineMockup(): ReactElement {
     { label: "runner", level: 2, active: false, kind: "heading" },
     { label: "Step 3（进阶）", level: 1, active: true, kind: "heading" },
     { label: "OpenDevin 改造", level: 2, active: false, kind: "heading" },
-    { label: "最后一句话总结", level: 1, active: false, kind: "heading" },
-    { label: "Code block", level: 3, active: false, kind: "code" }
+    { label: "最后一句话总结", level: 1, active: false, kind: "heading" }
   ];
 
   return (
@@ -237,8 +236,8 @@ function ComponentBreakdown(): ReactElement {
           <button className="mock-outline-item demo-outline" data-active="true" type="button">
             Active in viewport
           </button>
-          <button className="mock-outline-item demo-outline" data-kind="code" type="button">
-            Code block
+          <button className="mock-outline-item demo-outline" type="button" style={{ "--depth": 2 } as MockDepthStyle}>
+            Top response heading
           </button>
         </div>
       </div>
