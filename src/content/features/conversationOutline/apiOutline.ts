@@ -113,7 +113,7 @@ function cleanMarkdownHeadingLabel(label: string): string {
 }
 
 function markdownFence(line: string): MarkdownFence | null {
-  const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+  const match = line.match(/^\s*(`{3,}|~{3,})/);
   if (!match) {
     return null;
   }
