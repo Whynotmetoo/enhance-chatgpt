@@ -692,6 +692,82 @@ function visibleOutlineItems(items: OutlineItem[], expandedIds: ReadonlySet<stri
   return visibleItems;
 }
 
+function visibleActiveItemId(items: OutlineItem[], index: number, visibleIds: ReadonlySet<string>): string | null {
+  const item = items[index];
+  if (!item) {
+    return null;
+  }
+
+  if (visibleIds.has(item.id)) {
+    return item.id;
+  }
+
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const ancestor = items[cursor];
+    if (ancestor.level < item.level && visibleIds.has(ancestor.id)) {
+      return ancestor.id;
+    }
+  }
+
+  return null;
+}
+
+function isRightSidePanelElement(element: HTMLElement): boolean {
+  for (let current: HTMLElement | null = element; current && current !== document.body; current = current.parentElement) {
+    if (current.closest(".ecg-outline")) {
+      return false;
+    }
+
+    const rect = current.getBoundingClientRect();
+    const style = window.getComputedStyle(current);
+    const isVisibleElement =
+      style.display !== "none" && style.visibility !== "hidden" && Number.parseFloat(style.opacity || "1") > 0;
+    const rightAligned = rect.left > window.innerWidth * 0.52 && rect.right > window.innerWidth - 96;
+    const sidePanelSized =
+      rect.width >= 280 && rect.width <= window.innerWidth * 0.52 && rect.height >= window.innerHeight * 0.45;
+
+    if (isVisibleElement && rightAligned && sidePanelSized) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasRightSidePanel(): boolean {
+  const sampleX = window.innerWidth - 32;
+  const sampleYs = [96, window.innerHeight * 0.5, window.innerHeight - 96].filter(
+    (y) => y > 0 && y < window.innerHeight
+  );
+
+  return sampleYs.some((sampleY) =>
+    document
+      .elementsFromPoint(sampleX, sampleY)
+      .some((element) => element instanceof HTMLElement && isRightSidePanelElement(element))
+  );
+}
+
+function useRightSidePanel(): boolean {
+  const [isOpen, setIsOpen] = useState(() => hasRightSidePanel());
+
+  useEffect(() => {
+    const update = () => setIsOpen(hasRightSidePanel());
+    const scheduleUpdate = debounce(update, 100);
+    const observer = new MutationObserver(scheduleUpdate);
+
+    update();
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, []);
+
+  return isOpen;
+}
+
 function useConversationLocation(): ConversationLocation {
   const [location, setLocation] = useState<ConversationLocation>(() => ({
     conversationId: conversationIdFromLocation(),
@@ -758,6 +834,7 @@ export function ConversationOutline(): ReactElement | null {
   const [items, setItems] = useState<OutlineItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const isRightSidePanelOpen = useRightSidePanel();
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
   useEffect(() => {
@@ -850,13 +927,32 @@ export function ConversationOutline(): ReactElement | null {
   }, [conversationId, conversationLocation.changedAt, source]);
 
   useEffect(() => {
-    const observableItems = renderedItems.filter((item) => item.element);
+    const observableItems = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.element);
     if (observableItems.length === 0) {
       setActiveId(null);
       return;
     }
 
     const targetIds = new Map<HTMLElement, string>();
+    const visibleIds = new Set(renderedItems.map((item) => item.id));
+    const updateActiveFromViewport = () => {
+      const viewportTop = window.innerHeight * 0.18;
+      const viewportBottom = window.innerHeight * 0.38;
+      const visible = observableItems
+        .map(({ item }) => item.element)
+        .filter((element): element is HTMLElement => element !== null)
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.bottom >= viewportTop && rect.top <= viewportBottom;
+        })
+        .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+
+      if (visible[0]) {
+        setActiveId(targetIds.get(visible[0]) ?? null);
+      }
+    };
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
@@ -868,20 +964,26 @@ export function ConversationOutline(): ReactElement | null {
         }
       },
       {
-        rootMargin: "-18% 0px -62% 0px",
+        rootMargin: "-10% 0px -62% 0px",
         threshold: [0, 0.1, 0.5, 1]
       }
     );
 
     observableItems.forEach((item) => {
-      if (item.element) {
-        targetIds.set(item.element, item.id);
-        observer.observe(item.element);
+      if (item.item.element) {
+        targetIds.set(item.item.element, visibleActiveItemId(items, item.index, visibleIds) ?? item.item.id);
+        observer.observe(item.item.element);
       }
     });
 
-    return () => observer.disconnect();
-  }, [renderedItems]);
+    updateActiveFromViewport();
+    const frame = window.requestAnimationFrame(updateActiveFromViewport);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [items, renderedItems]);
 
   const toggleOutlineItem = (item: RenderedOutlineItem) => {
     setExpandedIds((current) => {
@@ -896,7 +998,7 @@ export function ConversationOutline(): ReactElement | null {
     });
   };
 
-  if (source.conversationId !== conversationId || items.length === 0) {
+  if (source.conversationId !== conversationId || items.length === 0 || isRightSidePanelOpen) {
     return null;
   }
 
