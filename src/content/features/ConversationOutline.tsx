@@ -20,6 +20,74 @@ type OutlineDepthStyle = CSSProperties & {
 
 const initialActiveRefreshDelays = [80, 240, 600, 1000];
 
+function outlineItemKey(item: OutlineItem): string {
+  if (!item.messageId) {
+    return `id:${item.id}`;
+  }
+
+  return item.headingIndex === null
+    ? `${item.kind}:${item.messageId}`
+    : `${item.kind}:${item.messageId}:${item.headingIndex}`;
+}
+
+function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem): OutlineItem {
+  return {
+    ...incoming,
+    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element
+  };
+}
+
+function mergeOutlineItems(currentItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
+  const mergedItems = [...currentItems];
+  const itemIndexes = new Map(mergedItems.map((item, index) => [outlineItemKey(item), index]));
+
+  incomingItems.forEach((item) => {
+    const key = outlineItemKey(item);
+    const existingIndex = itemIndexes.get(key);
+
+    if (existingIndex === undefined) {
+      itemIndexes.set(key, mergedItems.length);
+      mergedItems.push(item);
+      return;
+    }
+
+    mergedItems[existingIndex] = mergeExistingOutlineItem(mergedItems[existingIndex], item);
+  });
+
+  return mergedItems;
+}
+
+function appendMissingOutlineItems(baseItems: OutlineItem[], extraItems: OutlineItem[]): OutlineItem[] {
+  const mergedItems = [...baseItems];
+  const itemIndexes = new Map(mergedItems.map((item, index) => [outlineItemKey(item), index]));
+
+  extraItems.forEach((item) => {
+    const key = outlineItemKey(item);
+    const existingIndex = itemIndexes.get(key);
+
+    if (existingIndex === undefined) {
+      itemIndexes.set(key, mergedItems.length);
+      mergedItems.push(item);
+      return;
+    }
+
+    const existing = mergedItems[existingIndex];
+    mergedItems[existingIndex] = {
+      ...existing,
+      element: connectedElement(existing.element) ?? connectedElement(item.element) ?? existing.element
+    };
+  });
+
+  return mergedItems;
+}
+
+function liveOutlineItems(apiItems: OutlineItem[], currentItems: OutlineItem[]): OutlineItem[] {
+  const boundApiItems = bindOutlineItems(apiItems);
+  const accumulatedItems = appendMissingOutlineItems(boundApiItems, currentItems);
+
+  return mergeOutlineItems(accumulatedItems, collectDomOutlineItems());
+}
+
 export function ConversationOutline(): ReactElement | null {
   const conversationLocation = useConversationLocation();
   const { conversationId } = conversationLocation;
@@ -81,7 +149,7 @@ export function ConversationOutline(): ReactElement | null {
     }
 
     if (source.mode === "dom") {
-      const update = () => setItems(collectDomOutlineItems());
+      const update = () => setItems((currentItems) => mergeOutlineItems(currentItems, collectDomOutlineItems()));
       const scheduleUpdate = debounce(update, 150);
       const observer = new MutationObserver(scheduleUpdate);
 
@@ -91,7 +159,7 @@ export function ConversationOutline(): ReactElement | null {
       return () => observer.disconnect();
     }
 
-    const update = () => setItems(bindOutlineItems(source.items));
+    const update = () => setItems((currentItems) => liveOutlineItems(source.items, currentItems));
     const scheduleUpdate = debounce(update, 150);
     const controller = new AbortController();
     let refreshing = false;
