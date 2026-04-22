@@ -3,15 +3,22 @@ import { useEffect, useMemo, useState } from "react";
 import { debounce } from "../lib/dom";
 import { fetchConversationOutlineWithRetry } from "./conversationOutline/apiOutline";
 import { pendingScrollDelayMs } from "./conversationOutline/constants";
-import { bindOutlineItems, collectDomOutlineItems, conversationMutationRoot } from "./conversationOutline/domOutline";
+import {
+  bindOutlineItems,
+  collectDomOutlineItems,
+  connectedElement,
+  conversationMutationRoot
+} from "./conversationOutline/domOutline";
 import { useConversationLocation, useRightSidePanel } from "./conversationOutline/hooks";
 import { visibleActiveItemId, visibleOutlineItems } from "./conversationOutline/rendering";
-import { nextPendingScroll, scrollToOutlineItem } from "./conversationOutline/scroll";
+import { nextPendingScroll, scrollContainerFor, scrollToOutlineItem } from "./conversationOutline/scroll";
 import type { OutlineItem, OutlineSource, PendingScroll, RenderedOutlineItem } from "./conversationOutline/types";
 
 type OutlineDepthStyle = CSSProperties & {
   "--ecg-depth": number;
 };
+
+const initialActiveRefreshDelays = [80, 240, 600, 1000];
 
 export function ConversationOutline(): ReactElement | null {
   const conversationLocation = useConversationLocation();
@@ -116,60 +123,86 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     const observableItems = items
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => item.element);
+      .map((item, index) => ({ element: connectedElement(item.element), index }))
+      .filter((item): item is { element: HTMLElement; index: number } => item.element !== null);
     if (observableItems.length === 0) {
       setActiveId(null);
       return;
     }
 
-    const targetIds = new Map<HTMLElement, string>();
     const visibleIds = new Set(renderedItems.map((item) => item.id));
     const updateActiveFromViewport = () => {
       const viewportTop = window.innerHeight * 0.18;
       const viewportBottom = window.innerHeight * 0.38;
-      const visible = observableItems
-        .map(({ item }) => item.element)
-        .filter((element): element is HTMLElement => element !== null)
-        .filter((element) => {
+      const candidates = observableItems
+        .map(({ element, index }) => {
           const rect = element.getBoundingClientRect();
-          return rect.bottom >= viewportTop && rect.top <= viewportBottom;
+          return { element, index, rect };
         })
-        .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+        .filter(({ element, rect }) => element.isConnected && rect.height > 0)
+        .sort((a, b) => a.rect.top - b.rect.top);
 
-      if (visible[0]) {
-        setActiveId(targetIds.get(visible[0]) ?? null);
+      if (candidates.length === 0) {
+        setActiveId(null);
+        return;
+      }
+
+      const visibleHeading = candidates.find(({ rect }) => rect.bottom >= viewportTop && rect.top <= viewportBottom);
+      let active = visibleHeading;
+      if (!active) {
+        for (const candidate of candidates) {
+          if (candidate.rect.top <= viewportBottom) {
+            active = candidate;
+          }
+        }
+      }
+      active ??= candidates[0];
+
+      const nextActiveId = visibleActiveItemId(items, active.index, visibleIds);
+      if (nextActiveId) {
+        setActiveId((current) => (current === nextActiveId ? current : nextActiveId));
       }
     };
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    let frame: number | null = null;
+    const scheduleActiveUpdate = () => {
+      if (frame !== null) {
+        return;
+      }
 
-        if (visible[0]?.target instanceof HTMLElement) {
-          setActiveId(targetIds.get(visible[0].target) ?? null);
-        }
-      },
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        updateActiveFromViewport();
+      });
+    };
+    const observer = new IntersectionObserver(
+      () => scheduleActiveUpdate(),
       {
         rootMargin: "-10% 0px -62% 0px",
         threshold: [0, 0.1, 0.5, 1]
       }
     );
+    const scrollTargets = new Set<EventTarget>([window]);
 
     observableItems.forEach((item) => {
-      if (item.item.element) {
-        targetIds.set(item.item.element, visibleActiveItemId(items, item.index, visibleIds) ?? item.item.id);
-        observer.observe(item.item.element);
-      }
+      observer.observe(item.element);
+      const container = scrollContainerFor(item.element);
+      scrollTargets.add(container === document.scrollingElement ? window : container);
     });
+    scrollTargets.forEach((target) => target.addEventListener("scroll", scheduleActiveUpdate, { passive: true }));
+    window.addEventListener("resize", scheduleActiveUpdate);
 
     updateActiveFromViewport();
-    const frame = window.requestAnimationFrame(updateActiveFromViewport);
+    scheduleActiveUpdate();
+    const timers = initialActiveRefreshDelays.map((delay) => window.setTimeout(scheduleActiveUpdate, delay));
 
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      timers.forEach((timer) => window.clearTimeout(timer));
       observer.disconnect();
+      scrollTargets.forEach((target) => target.removeEventListener("scroll", scheduleActiveUpdate));
+      window.removeEventListener("resize", scheduleActiveUpdate);
     };
   }, [items, renderedItems]);
 
