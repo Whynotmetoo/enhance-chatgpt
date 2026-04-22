@@ -161,8 +161,11 @@ export function scrollToOutlineItem(items: OutlineItem[], index: number, behavio
 
 export function nextPendingScroll(items: OutlineItem[], pendingScroll: PendingScroll): PendingScroll | null {
   const index = items.findIndex((item) => item.id === pendingScroll.id);
-  const nextIndex = index >= 0 ? index : pendingScroll.index;
-  const reachedExactTarget = scrollToOutlineItem(items, nextIndex, "auto");
+  if (index < 0) {
+    return null;
+  }
+
+  const reachedExactTarget = scrollToOutlineItem(items, index, "smooth");
   if (reachedExactTarget || pendingScroll.attempts + 1 >= maxPendingScrollAttempts) {
     return null;
   }
@@ -170,6 +173,6 @@ export function nextPendingScroll(items: OutlineItem[], pendingScroll: PendingSc
   return {
     ...pendingScroll,
     attempts: pendingScroll.attempts + 1,
-    index: nextIndex
+    index
   };
 }

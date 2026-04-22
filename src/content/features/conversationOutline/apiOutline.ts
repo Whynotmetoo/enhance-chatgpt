@@ -36,6 +36,11 @@ type MarkdownHeading = {
   level: number;
 };
 
+type MarkdownFence = {
+  marker: "`" | "~";
+  length: number;
+};
+
 function apiMessageRole(message: ApiMessage): ApiAuthorRole | null {
   const role = message.author?.role;
   return role === "user" || role === "assistant" || role === "system" || role === "tool" ? role : null;
@@ -107,17 +112,39 @@ function cleanMarkdownHeadingLabel(label: string): string {
     .trim();
 }
 
+function markdownFence(line: string): MarkdownFence | null {
+  const match = line.match(/^\s*(`{3,}|~{3,})/);
+  if (!match) {
+    return null;
+  }
+
+  const fence = match[1];
+  return {
+    marker: fence[0] as "`" | "~",
+    length: fence.length
+  };
+}
+
 function markdownHeadings(markdown: string): MarkdownHeading[] {
   const headings: MarkdownHeading[] = [];
-  let inFence = false;
+  let activeFence: MarkdownFence | null = null;
 
   markdown.split(/\r?\n/).forEach((line) => {
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence;
+    const fence = markdownFence(line);
+    if (fence && activeFence) {
+      if (fence.marker === activeFence.marker && fence.length >= activeFence.length) {
+        activeFence = null;
+      }
+
       return;
     }
 
-    if (inFence) {
+    if (fence) {
+      activeFence = fence;
+      return;
+    }
+
+    if (activeFence) {
       return;
     }
 

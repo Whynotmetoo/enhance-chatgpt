@@ -97,10 +97,15 @@ function userLabel(turn: HTMLElement, index: number): string {
   return normalizeLabel(source.textContent, `User message ${index}`);
 }
 
-function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineItem[] {
-  const headings = Array.from(turn.querySelectorAll<HTMLElement>(answerHeadingSelector))
+function answerHeadings(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(answerHeadingSelector))
     .filter(isVisible)
+    .filter((heading) => !heading.closest("pre, code, [data-testid='code-block']"))
     .sort(compareDocumentOrder);
+}
+
+function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineItem[] {
+  const headings = answerHeadings(turn);
 
   if (headings.length === 0) {
     return [];
@@ -179,9 +184,7 @@ export function exactOutlineElement(item: OutlineItem): HTMLElement | null {
     return turn;
   }
 
-  const headings = Array.from(message.querySelectorAll<HTMLElement>(answerHeadingSelector))
-    .filter(isVisible)
-    .sort(compareDocumentOrder);
+  const headings = answerHeadings(message);
 
   return headings[item.headingIndex] ?? null;
 }
@@ -200,17 +203,75 @@ function bindOutlineItem(item: OutlineItem): OutlineItem {
   let element: HTMLElement = turn;
 
   if (item.headingIndex !== null) {
-    const headings = Array.from(message.querySelectorAll<HTMLElement>(answerHeadingSelector))
-      .filter(isVisible)
-      .sort(compareDocumentOrder);
+    const headings = answerHeadings(message);
     element = headings[item.headingIndex] ?? turn;
   }
 
   return { ...item, element };
 }
 
+function domHeadingItemsForMessage(messageId: string, apiItems: OutlineItem[]): OutlineItem[] | null {
+  const message = findMessageElement(messageId);
+  if (!message) {
+    return null;
+  }
+
+  const headings = answerHeadings(message);
+  if (headings.length === 0) {
+    return null;
+  }
+
+  const topHeadingLevel = Math.min(...headings.map(headingLevel));
+  const apiItemsByHeadingIndex = new Map<number, OutlineItem>();
+  apiItems.forEach((item) => {
+    if (item.headingIndex !== null) {
+      apiItemsByHeadingIndex.set(item.headingIndex, item);
+    }
+  });
+
+  return headings
+    .map((element, headingIndex) => ({ element, headingIndex }))
+    .filter(({ element }) => headingLevel(element) === topHeadingLevel)
+    .map(({ element, headingIndex }, index) => {
+      const apiItem = apiItemsByHeadingIndex.get(headingIndex) ?? apiItems[index];
+
+      return {
+        id: apiItem?.id ?? stableOutlineId(element, "heading", headingIndex),
+        label: normalizeLabel(element.textContent, apiItem?.label ?? "ChatGPT response"),
+        level: apiItem?.level ?? 2,
+        kind: "heading",
+        messageId,
+        headingIndex,
+        element
+      };
+    });
+}
+
 export function bindOutlineItems(items: OutlineItem[]): OutlineItem[] {
-  return items.map(bindOutlineItem);
+  const boundItems: OutlineItem[] = [];
+  let index = 0;
+
+  while (index < items.length) {
+    const item = items[index];
+    if (!item.messageId || item.kind !== "heading") {
+      boundItems.push(bindOutlineItem(item));
+      index += 1;
+      continue;
+    }
+
+    const messageId = item.messageId;
+    const messageItems: OutlineItem[] = [];
+
+    while (index < items.length && items[index].messageId === messageId && items[index].kind === "heading") {
+      messageItems.push(items[index]);
+      index += 1;
+    }
+
+    const domHeadingItems = domHeadingItemsForMessage(messageId, messageItems);
+    boundItems.push(...(domHeadingItems ?? messageItems.map(bindOutlineItem)));
+  }
+
+  return boundItems;
 }
 
 export function connectedElement(element: HTMLElement | null | undefined): HTMLElement | null {
