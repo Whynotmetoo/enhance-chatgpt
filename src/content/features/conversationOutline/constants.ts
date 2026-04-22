@@ -1,0 +1,14 @@
+export const outlineIdAttribute = "data-ecg-outline-id";
+export const maxLabelLength = 88;
+export const turnSelector = "[data-turn='user'], [data-turn='assistant']";
+export const messageSelector = "[data-message-author-role='user'], [data-message-author-role='assistant']";
+export const answerHeadingSelector = ".markdown :is(h1, h2, h3, h4, h5, h6)";
+export const conversationPathPattern = /^\/c\/([^/?#]+)/;
+export const locationChangeSource = "enhance-chatgpt:location-changed";
+export const maxPendingScrollAttempts = 40;
+export const pendingScrollDelayMs = 240;
+export const pendingScrollStepRatio = 0.7;
+export const pendingScrollMinStep = 480;
+export const pendingHeadingScrollMinStep = 1400;
+export const outlineScrollTopOffset = 90;
+export const outlineScrollAlignmentTolerance = 12;
