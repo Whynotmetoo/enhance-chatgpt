@@ -37,17 +37,45 @@ function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem):
   };
 }
 
+function outlineItemIndexes(items: OutlineItem[]): Map<string, number> {
+  return new Map(items.map((item, index) => [outlineItemKey(item), index]));
+}
+
+function outlineInsertionIndex(
+  itemIndexes: ReadonlyMap<string, number>,
+  incomingItems: OutlineItem[],
+  incomingIndex: number,
+  fallbackIndex: number
+): number {
+  for (let cursor = incomingIndex - 1; cursor >= 0; cursor -= 1) {
+    const previousIndex = itemIndexes.get(outlineItemKey(incomingItems[cursor]));
+    if (previousIndex !== undefined) {
+      return previousIndex + 1;
+    }
+  }
+
+  for (let cursor = incomingIndex + 1; cursor < incomingItems.length; cursor += 1) {
+    const nextIndex = itemIndexes.get(outlineItemKey(incomingItems[cursor]));
+    if (nextIndex !== undefined) {
+      return nextIndex;
+    }
+  }
+
+  return fallbackIndex;
+}
+
 function mergeOutlineItems(currentItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
   const mergedItems = [...currentItems];
-  const itemIndexes = new Map(mergedItems.map((item, index) => [outlineItemKey(item), index]));
+  let itemIndexes = outlineItemIndexes(mergedItems);
 
-  incomingItems.forEach((item) => {
+  incomingItems.forEach((item, incomingIndex) => {
     const key = outlineItemKey(item);
     const existingIndex = itemIndexes.get(key);
 
     if (existingIndex === undefined) {
-      itemIndexes.set(key, mergedItems.length);
-      mergedItems.push(item);
+      const insertionIndex = outlineInsertionIndex(itemIndexes, incomingItems, incomingIndex, mergedItems.length);
+      mergedItems.splice(insertionIndex, 0, item);
+      itemIndexes = outlineItemIndexes(mergedItems);
       return;
     }
 
