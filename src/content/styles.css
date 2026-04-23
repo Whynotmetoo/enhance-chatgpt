@@ -160,6 +160,31 @@
   background: var(--ecg-hover);
 }
 
+.ecg-prompt-composer-anchor {
+  position: relative;
+}
+
+[data-ecg-prompt-trigger-host] {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  inset-block-start: 50%;
+  inset-inline-start: -36px;
+  pointer-events: auto;
+  position: absolute;
+  transform: translateY(-50%);
+  z-index: 2147483202;
+}
+
+[data-ecg-prompt-panel-host] {
+  bottom: calc(100% + 8px);
+  box-sizing: border-box;
+  inset-inline: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2147483202;
+}
+
 .ecg-prompt-trigger {
   align-items: center;
   background: transparent;
@@ -170,15 +195,13 @@
   display: inline-flex;
   height: 28px;
   justify-content: center;
-  margin-left: -14px;
-  margin-top: -14px;
+  margin: 0;
   opacity: 0.72;
   padding: 0;
   pointer-events: auto;
-  position: fixed;
+  position: static;
   transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
   width: 28px;
-  z-index: 2147483202;
 }
 
 .ecg-prompt-trigger:hover,
@@ -197,9 +220,8 @@
   max-height: min(420px, calc(100vh - 180px));
   overflow: hidden;
   pointer-events: auto;
-  position: fixed;
-  transform: translateY(-100%);
-  z-index: 2147483202;
+  position: relative;
+  width: 100%;
 }
 
 .ecg-prompt-list {

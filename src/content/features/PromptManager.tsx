@@ -1,17 +1,25 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SavedPrompt } from "../../shared/promptTypes";
 import { loadPrompts, savePrompts } from "../lib/browserStorage";
 import {
+  findPromptComposerForm,
   findPromptInput,
   isPromptInputTarget,
   readPromptInput,
   writePromptInput
 } from "../lib/dom";
 import { CloseIcon, PlusIcon, PromptIcon } from "../lib/icons";
-import { useElementRect } from "../lib/useElementRect";
 
 const maxTitleLength = 54;
+const promptTriggerHostAttribute = "data-ecg-prompt-trigger-host";
+const promptPanelHostAttribute = "data-ecg-prompt-panel-host";
+
+type PromptComposerAnchors = {
+  panelHost: HTMLElement;
+  triggerHost: HTMLElement;
+};
 
 function createPromptId(): string {
   if (globalThis.crypto?.randomUUID) {
@@ -42,11 +50,77 @@ function composeInsertedText(current: string, promptBody: string): string {
   return `${withoutSlash}\n\n${promptBody}`;
 }
 
+function sameAnchors(current: PromptComposerAnchors | null, next: PromptComposerAnchors | null): boolean {
+  return current?.triggerHost === next?.triggerHost && current?.panelHost === next?.panelHost;
+}
+
+function usePromptComposerAnchors(): PromptComposerAnchors | null {
+  const [anchors, setAnchors] = useState<PromptComposerAnchors | null>(null);
+
+  useEffect(() => {
+    const createdHosts = new Set<HTMLElement>();
+    let frame = 0;
+
+    const syncAnchors = () => {
+      const input = findPromptInput();
+      const form = findPromptComposerForm(input);
+
+      if (!form) {
+        setAnchors((current) => (current === null ? current : null));
+        return;
+      }
+
+      form.classList.add("ecg-prompt-composer-anchor");
+
+      let triggerHost = form.querySelector<HTMLElement>(`[${promptTriggerHostAttribute}]`);
+      if (!triggerHost) {
+        triggerHost = document.createElement("div");
+        triggerHost.setAttribute(promptTriggerHostAttribute, "true");
+        form.append(triggerHost);
+        createdHosts.add(triggerHost);
+      }
+
+      let panelHost = form.querySelector<HTMLElement>(`[${promptPanelHostAttribute}]`);
+      if (!panelHost) {
+        panelHost = document.createElement("div");
+        panelHost.setAttribute(promptPanelHostAttribute, "true");
+        form.append(panelHost);
+        createdHosts.add(panelHost);
+      }
+
+      const nextAnchors = { panelHost, triggerHost };
+      setAnchors((current) => (sameAnchors(current, nextAnchors) ? current : nextAnchors));
+    };
+
+    const scheduleSyncAnchors = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(syncAnchors);
+    };
+
+    syncAnchors();
+
+    const observer = new MutationObserver(scheduleSyncAnchors);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      createdHosts.forEach((host) => {
+        if (host.childElementCount === 0) {
+          host.remove();
+        }
+      });
+    };
+  }, []);
+
+  return anchors;
+}
+
 export function PromptManager(): ReactElement | null {
   const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const inputRect = useElementRect(findPromptInput, [isOpen], 250);
+  const anchors = usePromptComposerAnchors();
 
   const hasPrompts = prompts.length > 0;
   const activePrompt = useMemo(
@@ -173,35 +247,29 @@ export function PromptManager(): ReactElement | null {
     }
   }
 
-  if (!inputRect) {
+  if (!anchors) {
     return null;
   }
 
-  return (
-    <>
-      <button
-        aria-expanded={isOpen}
-        aria-label="Open saved prompts"
-        className="ecg-prompt-trigger"
-        style={{
-          left: inputRect.left + 43,
-          top: inputRect.top + inputRect.height / 2
-        }}
-        type="button"
-        onClick={() => setIsOpen((value) => !value)}
-      >
-        <PromptIcon />
-      </button>
-      {isOpen ? (
+  const trigger = createPortal(
+    <button
+      aria-expanded={isOpen}
+      aria-label="Open saved prompts"
+      className="ecg-prompt-trigger"
+      type="button"
+      onClick={() => setIsOpen((value) => !value)}
+    >
+      <PromptIcon />
+    </button>,
+    anchors.triggerHost
+  );
+
+  const panel = isOpen
+    ? createPortal(
         <div
           aria-label="Saved prompts"
           className="ecg-prompt-panel"
           role="listbox"
-          style={{
-            left: inputRect.left,
-            top: inputRect.top - 10,
-            width: inputRect.width
-          }}
           onKeyDown={handlePanelKeyDown}
         >
           <div className="ecg-prompt-list">
@@ -258,8 +326,15 @@ export function PromptManager(): ReactElement | null {
               Save current input as prompt
             </button>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        anchors.panelHost
+      )
+    : null;
+
+  return (
+    <>
+      {trigger}
+      {panel}
     </>
   );
 }
