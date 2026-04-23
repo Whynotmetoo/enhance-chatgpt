@@ -33,6 +33,14 @@ export function findPromptInput(): HTMLElement | null {
   ]);
 }
 
+export function findPromptComposerForm(input = findPromptInput()): HTMLFormElement | null {
+  return (
+    input?.closest<HTMLFormElement>("form[data-type='unified-composer']") ??
+    input?.closest<HTMLFormElement>("form") ??
+    null
+  );
+}
+
 export function readPromptInput(input: HTMLElement): string {
   if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
     return input.value;
