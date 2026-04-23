@@ -222,6 +222,14 @@ function domHeadingItemsForMessage(messageId: string, apiItems: OutlineItem[]): 
   }
 
   const topHeadingLevel = Math.min(...headings.map(headingLevel));
+  const topHeadings = headings
+    .map((element, headingIndex) => ({ element, headingIndex }))
+    .filter(({ element }) => headingLevel(element) === topHeadingLevel);
+
+  if (topHeadings.length < apiItems.length) {
+    return null;
+  }
+
   const apiItemsByHeadingIndex = new Map<number, OutlineItem>();
   apiItems.forEach((item) => {
     if (item.headingIndex !== null) {
@@ -229,22 +237,19 @@ function domHeadingItemsForMessage(messageId: string, apiItems: OutlineItem[]): 
     }
   });
 
-  return headings
-    .map((element, headingIndex) => ({ element, headingIndex }))
-    .filter(({ element }) => headingLevel(element) === topHeadingLevel)
-    .map(({ element, headingIndex }, index) => {
-      const apiItem = apiItemsByHeadingIndex.get(headingIndex) ?? apiItems[index];
+  return topHeadings.map(({ element, headingIndex }, index) => {
+    const apiItem = apiItemsByHeadingIndex.get(headingIndex) ?? apiItems[index];
 
-      return {
-        id: apiItem?.id ?? stableOutlineId(element, "heading", headingIndex),
-        label: normalizeLabel(element.textContent, apiItem?.label ?? "ChatGPT response"),
-        level: apiItem?.level ?? 2,
-        kind: "heading",
-        messageId,
-        headingIndex,
-        element
-      };
-    });
+    return {
+      id: apiItem?.id ?? stableOutlineId(element, "heading", headingIndex),
+      label: normalizeLabel(element.textContent, apiItem?.label ?? "ChatGPT response"),
+      level: apiItem?.level ?? 2,
+      kind: "heading",
+      messageId,
+      headingIndex,
+      element
+    };
+  });
 }
 
 export function bindOutlineItems(items: OutlineItem[]): OutlineItem[] {
