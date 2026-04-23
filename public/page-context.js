@@ -9,6 +9,7 @@
   const requestSource = "enhance-chatgpt:fetch-conversation";
   const responseSource = "enhance-chatgpt:fetch-conversation-response";
   const locationChangeSource = "enhance-chatgpt:location-changed";
+  const conversationActivitySource = "enhance-chatgpt:conversation-activity";
   const conversationCache = new Map();
   const pendingConversations = new Map();
   let lastHref = window.location.href;
@@ -40,6 +41,30 @@
     }
 
     window.setTimeout(() => postLocationChanged(changedAt), 0);
+  }
+
+  function conversationIdFromUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.origin);
+      const match = parsedUrl.pathname.match(/^\/c\/([^/?#]+)/);
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function postConversationActivity(phase, detail = {}) {
+    window.postMessage(
+      {
+        source: conversationActivitySource,
+        phase,
+        href: window.location.href,
+        conversationId: conversationIdFromUrl(window.location.href),
+        changedAt: Date.now(),
+        ...detail
+      },
+      window.location.origin
+    );
   }
 
   function installLocationObserver() {
@@ -74,6 +99,17 @@
       return match ? decodeURIComponent(match[1]) : null;
     } catch {
       return null;
+    }
+  }
+
+  function isConversationStateInput(input) {
+    const url = input instanceof Request ? input.url : String(input);
+
+    try {
+      const parsedUrl = new URL(url, window.location.origin);
+      return /^\/backend-api\/f\/conversation\/?$/.test(parsedUrl.pathname);
+    } catch {
+      return false;
     }
   }
 
@@ -157,13 +193,32 @@
       .catch((error) => rejectPendingConversation(conversationId, error));
   }
 
+  function observeConversationStateResponse(responsePromise) {
+    void responsePromise
+      .then((response) => {
+        postConversationActivity("response", {
+          ok: response.ok,
+          status: response.status
+        });
+      })
+      .catch(() => postConversationActivity("error"));
+  }
+
   function wrapFetch(fetchImplementation) {
     return function enhanceChatGPTFetch(input, init) {
       const conversationId = conversationIdFromInput(input, init);
+      const isConversationStateRequest = isConversationStateInput(input);
+      if (isConversationStateRequest) {
+        postConversationActivity("request");
+      }
+
       const responsePromise = fetchImplementation.apply(this, arguments);
 
       if (conversationId) {
         observeConversationResponse(conversationId, responsePromise);
+      }
+      if (isConversationStateRequest) {
+        observeConversationStateResponse(responsePromise);
       }
 
       return responsePromise;

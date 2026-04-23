@@ -9,7 +9,7 @@ import {
   connectedElement,
   conversationMutationRoot
 } from "./conversationOutline/domOutline";
-import { useConversationLocation, useRightSidePanel } from "./conversationOutline/hooks";
+import { useConversationLocation, useConversationStateActivity, useRightSidePanel } from "./conversationOutline/hooks";
 import { visibleActiveItemId, visibleOutlineItems } from "./conversationOutline/rendering";
 import { nextPendingScroll, scrollContainerFor, scrollToOutlineItem } from "./conversationOutline/scroll";
 import type { OutlineItem, OutlineSource, PendingScroll, RenderedOutlineItem } from "./conversationOutline/types";
@@ -19,6 +19,7 @@ type OutlineDepthStyle = CSSProperties & {
 };
 
 const initialActiveRefreshDelays = [80, 240, 600, 1000];
+const domFallbackDelayMs = 12_000;
 
 function outlineItemKey(item: OutlineItem): string {
   if (!item.messageId) {
@@ -109,8 +110,12 @@ function appendMissingOutlineItems(baseItems: OutlineItem[], extraItems: Outline
   return mergedItems;
 }
 
-function liveOutlineItems(apiItems: OutlineItem[], currentItems: OutlineItem[]): OutlineItem[] {
+function liveOutlineItems(apiItems: OutlineItem[], currentItems: OutlineItem[], includeDomItems: boolean): OutlineItem[] {
   const boundApiItems = bindOutlineItems(apiItems);
+  if (!includeDomItems) {
+    return boundApiItems;
+  }
+
   const accumulatedItems = appendMissingOutlineItems(boundApiItems, currentItems);
 
   return mergeOutlineItems(accumulatedItems, collectDomOutlineItems());
@@ -126,7 +131,19 @@ export function ConversationOutline(): ReactElement | null {
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
   const lastApiItemsRef = useRef<OutlineItem[] | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
+  const hasConversationStateActivity = useConversationStateActivity(conversationId, conversationLocation.changedAt);
+  const [domFallbackReady, setDomFallbackReady] = useState(false);
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
+
+  useEffect(() => {
+    setDomFallbackReady(false);
+    if (!conversationId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setDomFallbackReady(true), domFallbackDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [conversationId, conversationLocation.changedAt]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -151,13 +168,13 @@ export function ConversationOutline(): ReactElement | null {
           setSource({
             conversationId,
             mode: outlineItems.length > 0 ? "api" : "dom",
-            items: outlineItems.length > 0 ? outlineItems : collectDomOutlineItems()
+            items: outlineItems
           });
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setSource({ conversationId, mode: "dom", items: collectDomOutlineItems() });
+          setSource({ conversationId, mode: "dom", items: [] });
         }
       });
 
@@ -183,6 +200,11 @@ export function ConversationOutline(): ReactElement | null {
 
     if (source.mode === "dom") {
       lastApiItemsRef.current = null;
+      if (!hasConversationStateActivity && !domFallbackReady) {
+        setItems([]);
+        return;
+      }
+
       const update = () => setItems((currentItems) => mergeOutlineItems(currentItems, collectDomOutlineItems()));
       const scheduleUpdate = debounce(update, 150);
       const observer = new MutationObserver(scheduleUpdate);
@@ -196,7 +218,9 @@ export function ConversationOutline(): ReactElement | null {
     const update = () => {
       const apiItemsChanged = lastApiItemsRef.current !== source.items;
       lastApiItemsRef.current = source.items;
-      setItems((currentItems) => liveOutlineItems(source.items, apiItemsChanged ? [] : currentItems));
+      setItems((currentItems) =>
+        liveOutlineItems(source.items, apiItemsChanged ? [] : currentItems, hasConversationStateActivity)
+      );
     };
     const scheduleUpdate = debounce(update, 150);
     const controller = new AbortController();
@@ -233,7 +257,7 @@ export function ConversationOutline(): ReactElement | null {
       controller.abort();
       observer.disconnect();
     };
-  }, [conversationId, conversationLocation.changedAt, source]);
+  }, [conversationId, conversationLocation.changedAt, domFallbackReady, hasConversationStateActivity, source]);
 
   useEffect(() => {
     const observableItems = items

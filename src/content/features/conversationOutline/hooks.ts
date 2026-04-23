@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
+import {
+  recentConversationActivity,
+  subscribeConversationActivity,
+  type ConversationActivity
+} from "../../lib/chatGptApiBridge";
 import { debounce } from "../../lib/dom";
 import { locationChangeSource } from "./constants";
 import { conversationIdFromLocation, conversationIdFromUrl } from "./domOutline";
 import type { ConversationLocation } from "./types";
 import { isRecord } from "./utils";
+
+const activityRouteSlackMs = 1_500;
+
+type ConversationActivityObservation = {
+  conversationId: string | null;
+  changedAt: number;
+  observed: boolean;
+};
 
 function isRightSidePanelElement(element: HTMLElement): boolean {
   for (let current: HTMLElement | null = element; current && current !== document.body; current = current.parentElement) {
@@ -118,4 +131,57 @@ export function useConversationLocation(): ConversationLocation {
   }, []);
 
   return location;
+}
+
+function activityConversationId(activity: ConversationActivity): string | null {
+  return activity.conversationId ?? (activity.href ? conversationIdFromUrl(activity.href) : null);
+}
+
+function isRelevantConversationActivity(
+  activity: ConversationActivity,
+  conversationId: string,
+  changedAt: number
+): boolean {
+  if (activity.changedAt < changedAt - activityRouteSlackMs) {
+    return false;
+  }
+
+  const activityId = activityConversationId(activity);
+  return activityId === conversationId || activityId === null;
+}
+
+export function useConversationStateActivity(conversationId: string | null, changedAt: number): boolean {
+  const [observation, setObservation] = useState<ConversationActivityObservation>(() => ({
+    conversationId,
+    changedAt,
+    observed: conversationId
+      ? recentConversationActivity().some((activity) =>
+          isRelevantConversationActivity(activity, conversationId, changedAt)
+        )
+      : false
+  }));
+
+  useEffect(() => {
+    if (!conversationId) {
+      setObservation({ conversationId: null, changedAt, observed: false });
+      return;
+    }
+
+    const hasRecentActivity = () =>
+      recentConversationActivity().some((activity) => isRelevantConversationActivity(activity, conversationId, changedAt));
+
+    setObservation({ conversationId, changedAt, observed: hasRecentActivity() });
+
+    return subscribeConversationActivity((activity) => {
+      if (isRelevantConversationActivity(activity, conversationId, changedAt)) {
+        setObservation({ conversationId, changedAt, observed: true });
+      }
+    });
+  }, [conversationId, changedAt]);
+
+  return (
+    observation.conversationId === conversationId &&
+    observation.changedAt === changedAt &&
+    observation.observed
+  );
 }
