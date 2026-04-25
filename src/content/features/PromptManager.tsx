@@ -92,7 +92,17 @@ function IconButton({
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <button aria-label={label} className="ecg-prompt-icon-button" type="button" onClick={onClick}>
+        <button
+          aria-label={label}
+          className="ecg-prompt-icon-button"
+          type="button"
+          onClick={onClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.stopPropagation();
+            }
+          }}
+        >
           {children}
         </button>
       </Tooltip.Trigger>
