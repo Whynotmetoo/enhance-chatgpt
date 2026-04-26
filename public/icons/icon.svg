@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 外层圆角容器 -->
+  <rect x="96" y="96" width="832" height="832" rx="170" fill="#FAFAFA" stroke="#E6E6E6" stroke-width="4"></rect>
+
+  <!-- 聊天气泡 -->
+  <path d="M392 238H632C724 238 796 310 796 402V582C796 674 724 746 632 746H560L488 814C468 833 436 819 436 792V746H392C300 746 228 674 228 582V402C228 310 300 238 392 238Z" stroke="#20242C" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <!-- 紫色 accent -->
+  <rect x="420" y="302" width="184" height="46" rx="24" fill="#7C6FF2"></rect>
+
+  <!-- 下方结构整体上移 -->
+  <g transform="translate(0,-42)">
+
+    <!-- 树结构 -->
+    <path d="M512 438V516M512 486H376C364 486 356 494 356 506V532M512 486H648C660 486 668 494 668 506V532" stroke="#20242C" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"></path>
+
+    <!-- 三个节点 -->
+    <rect x="304" y="556" width="112" height="52" rx="10" fill="#20242C"></rect>
+    <rect x="456" y="556" width="112" height="52" rx="10" fill="#20242C"></rect>
+    <rect x="608" y="556" width="112" height="52" rx="10" fill="#20242C"></rect>
+
+    <!-- 文本线 -->
+    <rect x="304" y="640" width="112" height="20" rx="10" fill="#20242C"></rect>
+    <rect x="456" y="640" width="112" height="20" rx="10" fill="#20242C"></rect>
+    <rect x="608" y="640" width="112" height="20" rx="10" fill="#20242C"></rect>
+
+    <rect x="304" y="686" width="112" height="20" rx="10" fill="#20242C"></rect>
+    <rect x="456" y="686" width="112" height="20" rx="10" fill="#20242C"></rect>
+    <rect x="608" y="686" width="112" height="20" rx="10" fill="#20242C"></rect>
+
+  </g>
+</svg>
