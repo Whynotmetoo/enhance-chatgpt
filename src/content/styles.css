@@ -164,6 +164,11 @@
   position: relative;
 }
 
+.ecg-prompt-composer-layer {
+  position: relative !important;
+  z-index: 2147483201 !important;
+}
+
 [data-ecg-prompt-trigger-host] {
   align-items: center;
   display: inline-flex;
