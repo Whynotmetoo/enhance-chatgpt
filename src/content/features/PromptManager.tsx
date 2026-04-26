@@ -21,6 +21,7 @@ import {
 
 const promptTriggerHostAttribute = "data-ecg-prompt-trigger-host";
 const promptPanelHostAttribute = "data-ecg-prompt-panel-host";
+const promptComposerLayerClass = "ecg-prompt-composer-layer";
 
 type PromptComposerAnchors = {
   panelHost: HTMLElement;
@@ -175,6 +176,7 @@ function usePromptComposerAnchors(): PromptComposerAnchors | null {
 
   useEffect(() => {
     const createdHosts = new Set<HTMLElement>();
+    const composerLayers = new Set<HTMLElement>();
     let frame = 0;
 
     const syncAnchors = () => {
@@ -187,6 +189,10 @@ function usePromptComposerAnchors(): PromptComposerAnchors | null {
       }
 
       form.classList.add("ecg-prompt-composer-anchor");
+      if (form.parentElement) {
+        form.parentElement.classList.add(promptComposerLayerClass);
+        composerLayers.add(form.parentElement);
+      }
 
       let triggerHost = form.querySelector<HTMLElement>(`[${promptTriggerHostAttribute}]`);
       if (!triggerHost) {
@@ -226,6 +232,7 @@ function usePromptComposerAnchors(): PromptComposerAnchors | null {
           host.remove();
         }
       });
+      composerLayers.forEach((layer) => layer.classList.remove(promptComposerLayerClass));
     };
   }, []);
 
