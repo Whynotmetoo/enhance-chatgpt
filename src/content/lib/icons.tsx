@@ -43,12 +43,34 @@ export function ArchiveIcon(props: IconProps): ReactElement {
   );
 }
 
+export function ArchivePageIcon(props: IconProps): ReactElement {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7h16v4H4z" />
+      <path d="M6 11v8h12v-5" />
+      <path d="M10 15h3" />
+      <path d="M15 14h5v5" />
+      <path d="M14 20l6-6" />
+    </IconBase>
+  );
+}
+
 export function DotsIcon(props: IconProps): ReactElement {
   return (
     <IconBase {...props}>
       <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
       <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
+    </IconBase>
+  );
+}
+
+export function PluginIcon(props: IconProps): ReactElement {
+  return (
+    <IconBase {...props}>
+      <path d="M9 3h6v4h2a4 4 0 0 1 4 4v2h-4v6H7v-6H3v-2a4 4 0 0 1 4-4h2z" />
+      <path d="M10 19v2" />
+      <path d="M14 19v2" />
     </IconBase>
   );
 }
