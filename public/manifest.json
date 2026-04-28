@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Enhance ChatGPT",
+  "name": "EnhanceGPT",
   "version": "0.1.0",
   "description": "Native-feeling bulk chat management, prompt snippets, and conversation outlines for ChatGPT.",
   "permissions": ["storage"],

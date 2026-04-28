@@ -270,8 +270,8 @@ export function ConversationOutline(): ReactElement | null {
 
     const visibleIds = new Set(renderedItems.map((item) => item.id));
     const updateActiveFromViewport = () => {
-      const viewportTop = window.innerHeight * 0.18;
-      const viewportBottom = window.innerHeight * 0.38;
+      const viewportTop = window.innerHeight * 0.10;
+      const viewportBottom = window.innerHeight * 0.35;
       const candidates = observableItems
         .map(({ element, index }) => {
           const rect = element.getBoundingClientRect();
