@@ -121,7 +121,7 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  transition: opacity 180ms ease, color 180ms ease, background-color 180ms ease;
+  transition: color 180ms ease, background-color 180ms ease;
   width: 24px;
   z-index: 3;
 }
@@ -180,7 +180,7 @@
 }
 
 .ecg-conversation-row a[href*="/c/"] {
-  transition: padding-left 160ms ease;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 :root[data-ecg-bulk-active] .ecg-conversation-row a[href*="/c/"] {
