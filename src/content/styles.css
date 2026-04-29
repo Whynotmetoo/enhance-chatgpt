@@ -38,6 +38,10 @@
   width: auto !important;
 }
 
+:root[data-ecg-bulk-active] .ecg-recents-trigger {
+  padding-left: 4px !important;
+}
+
 [data-ecg-bulk-select-host],
 [data-ecg-bulk-actions-host] {
   align-items: center;
@@ -48,6 +52,11 @@
 
 [data-ecg-bulk-select-host] {
   margin-left: 8px;
+}
+
+[data-ecg-bulk-select-host]:empty {
+  display: none;
+  margin-left: 0;
 }
 
 [data-ecg-bulk-actions-host] {
