@@ -217,7 +217,7 @@
 }
 
 .ecg-conversation-checkbox[data-selected="true"] {
-  color: var(--ecg-focus);
+  color: var(--text-primary, var(--ecg-text));
   opacity: 1;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .ecg-conversation-checkbox[data-mixed="true"] {
-  color: var(--ecg-focus);
+  color: var(--text-primary, var(--ecg-text));
 }
 
 .ecg-conversation-checkbox[data-mixed="true"] .ecg-conversation-checkbox-mark::after {
@@ -275,8 +275,12 @@
   color: var(--ecg-text-soft);
 }
 
-.ecg-conversation-row-selected {
-  background: color-mix(in srgb, var(--ecg-focus) 8%, transparent) !important;
+.ecg-conversation-row-selected a[href*="/c/"] {
+  background: color-mix(
+    in srgb,
+    var(--surface-hover, var(--ecg-hover)) 86%,
+    var(--text-primary, CanvasText) 14%
+  ) !important;
 }
 
 .ecg-bulk-dialog-overlay {

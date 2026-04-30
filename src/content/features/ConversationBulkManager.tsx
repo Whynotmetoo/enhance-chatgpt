@@ -396,7 +396,11 @@ export function ConversationBulkManager(): ReactElement | null {
 
       item.row.classList.toggle(selectedRowClass, isSelected);
       checkbox?.setAttribute("aria-pressed", String(isSelected));
-      checkbox?.toggleAttribute("data-selected", isSelected);
+      if (isSelected) {
+        checkbox?.setAttribute("data-selected", "true");
+      } else {
+        checkbox?.removeAttribute("data-selected");
+      }
     });
 
     return () => {
