@@ -139,7 +139,7 @@
   border-radius: 16px;
   box-shadow: 0 8px 12px rgb(0 0 0 / 8%), 0 0 1px rgb(0 0 0 / 62%);
   color: var(--text-primary, var(--ecg-text));
-  min-width: 188px;
+  min-width: 228px;
   padding: 6px 0;
   pointer-events: auto;
   position: fixed;
@@ -149,17 +149,24 @@
 
 .ecg-bulk-menu-item {
   align-items: center;
+  background: transparent;
+  border: 0;
   border-radius: 10px;
+  box-sizing: border-box;
   color: inherit;
+  cursor: pointer;
   display: flex;
-  font-size: 14px;
   gap: 6px;
+  font: inherit;
+  font-size: 14px;
   line-height: 20px;
   margin: 0 6px;
   min-height: 36px;
   padding: 6px 32px 6px 10px;
+  text-align: left;
   text-decoration: none;
   white-space: nowrap;
+  width: calc(100% - 12px);
 }
 
 .ecg-bulk-menu-item:hover,
@@ -168,8 +175,27 @@
   outline: none;
 }
 
+.ecg-bulk-menu-item:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.ecg-bulk-menu-item:disabled:hover {
+  background: transparent;
+}
+
 .ecg-bulk-menu-item svg {
   flex: 0 0 auto;
+}
+
+.ecg-bulk-menu-item-danger {
+  color: var(--text-error, #c2352b);
+}
+
+.ecg-bulk-menu-separator {
+  background: var(--border-light, var(--ecg-line));
+  height: 1px;
+  margin: 6px 18px;
 }
 
 .ecg-bulk-menu-item-label {

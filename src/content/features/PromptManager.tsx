@@ -1,4 +1,3 @@
-import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import {
   BookmarkIcon,
   Pencil1Icon,
@@ -10,6 +9,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, RefObject } fro
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SavedPrompt } from "../../shared/promptTypes";
+import { AlertModal } from "../components/AlertModal";
 import { loadPrompts, savePrompts } from "../lib/browserStorage";
 import {
   findPromptComposerForm,
@@ -246,6 +246,7 @@ export function PromptManager(): ReactElement | null {
   const [editorMode, setEditorMode] = useState<PromptEditorMode | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(emptyDraft);
   const [deletePromptId, setDeletePromptId] = useState<string | null>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const anchors = usePromptComposerAnchors();
 
@@ -445,6 +446,10 @@ export function PromptManager(): ReactElement | null {
     setDeletePromptId(null);
   }
 
+  function closeDeletePromptDialog(): void {
+    setDeletePromptId(null);
+  }
+
   function openCreateEditor(): void {
     if (hasBlockingEditor) {
       titleInputRef.current?.focus();
@@ -583,6 +588,9 @@ export function PromptManager(): ReactElement | null {
   );
 
   const promptToDelete = prompts.find((prompt) => prompt.id === deletePromptId) ?? null;
+  const deletePromptDescription = `This removes ${
+    promptToDelete?.title ? `"${promptToDelete.title}"` : "this prompt"
+  } from your saved prompts.`;
   const panel = isOpen
     ? createPortal(
         <Tooltip.Provider delayDuration={350}>
@@ -665,46 +673,39 @@ export function PromptManager(): ReactElement | null {
                 </IconButton>
               </div>
             ) : null}
-            <AlertDialog.Root
+            <AlertModal
+              contentClassName="ecg-prompt-alert"
+              description={deletePromptDescription}
+              descriptionClassName="ecg-prompt-alert-description"
+              initialFocusRef={deleteCancelRef}
               open={Boolean(promptToDelete)}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setDeletePromptId(null);
-                }
-              }}
+              overlayClassName="ecg-prompt-alert-overlay"
+              title="Delete prompt?"
+              titleClassName="ecg-prompt-alert-title"
+              onClose={closeDeletePromptDialog}
             >
-              <AlertDialog.Portal>
-                <AlertDialog.Overlay className="ecg-prompt-alert-overlay" />
-                <AlertDialog.Content className="ecg-prompt-alert">
-                  <AlertDialog.Title className="ecg-prompt-alert-title">
-                    Delete prompt?
-                  </AlertDialog.Title>
-                  <AlertDialog.Description className="ecg-prompt-alert-description">
-                    This removes {promptToDelete?.title ? `"${promptToDelete.title}"` : "this prompt"} from your saved prompts.
-                  </AlertDialog.Description>
-                  <div className="ecg-prompt-alert-actions">
-                    <AlertDialog.Cancel asChild>
-                      <button className="ecg-prompt-secondary" type="button">
-                        Cancel
-                      </button>
-                    </AlertDialog.Cancel>
-                    <AlertDialog.Action asChild>
-                      <button
-                        className="ecg-prompt-danger"
-                        type="button"
-                        onClick={() => {
-                          if (promptToDelete) {
-                            void deletePrompt(promptToDelete.id);
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </AlertDialog.Action>
-                  </div>
-                </AlertDialog.Content>
-              </AlertDialog.Portal>
-            </AlertDialog.Root>
+              <div className="ecg-prompt-alert-actions">
+                <button
+                  className="ecg-prompt-secondary"
+                  ref={deleteCancelRef}
+                  type="button"
+                  onClick={closeDeletePromptDialog}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="ecg-prompt-danger"
+                  type="button"
+                  onClick={() => {
+                    if (promptToDelete) {
+                      void deletePrompt(promptToDelete.id);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </AlertModal>
           </div>
         </Tooltip.Provider>,
         anchors.panelHost

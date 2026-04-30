@@ -1,9 +1,9 @@
-import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ARCHIVE_PAGE_URL } from "../../shared/constants";
-import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon } from "../lib/icons";
+import { ARCHIVE_PAGE_URL, SUPPORT_EXTENSION_URL } from "../../shared/constants";
+import { AlertModal } from "../components/AlertModal";
+import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon, HeartIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 import { performConversationActionInPageContext } from "../lib/chatGptApiBridge";
 
@@ -71,7 +71,11 @@ type ArchiveMenuPosition = {
 
 function extensionResourceUrl(path: string): string {
   const scope = globalThis as ExtensionGlobal;
-  return (scope.chrome ?? scope.browser)?.runtime?.getURL?.(path) ?? path;
+  try {
+    return (scope.chrome ?? scope.browser)?.runtime?.getURL?.(path) ?? path;
+  } catch {
+    return path;
+  }
 }
 
 function findSidebar(): HTMLElement | null {
@@ -301,6 +305,7 @@ export function ConversationBulkManager(): ReactElement | null {
   const archiveMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
   const bulkAbortControllerRef = useRef<AbortController | null>(null);
+  const bulkCancelRef = useRef<HTMLButtonElement>(null);
 
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)),
@@ -529,6 +534,15 @@ export function ConversationBulkManager(): ReactElement | null {
     }
   };
 
+  const requestDeleteAllConversations = () => {
+    if (items.length === 0 || isBulkRunning) {
+      return;
+    }
+
+    setIsArchiveMenuOpen(false);
+    setBulkDialog({ action: "delete", items, status: "confirm" });
+  };
+
   const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[]) => {
     const successMessage = `${actionPastLabel(action)} ${pluralizeConversation(succeeded)}.`;
     const failureMessage =
@@ -621,6 +635,12 @@ export function ConversationBulkManager(): ReactElement | null {
     }
 
     void runBulkAction(bulkDialog.action, bulkDialog.items);
+  };
+
+  const closeBulkDialog = () => {
+    if (!isBulkRunning) {
+      setBulkDialog(null);
+    }
   };
 
   const selectAllControl = headerControls
@@ -716,6 +736,16 @@ export function ConversationBulkManager(): ReactElement | null {
             role="menu"
             style={{ left: archiveMenuPosition.left, top: archiveMenuPosition.top }}
           >
+            <button
+              className="ecg-bulk-menu-item ecg-bulk-menu-item-danger"
+              disabled={items.length === 0}
+              role="menuitem"
+              type="button"
+              onClick={requestDeleteAllConversations}
+            >
+              <ChatGptTrashIcon />
+              <span className="ecg-bulk-menu-item-label">Delete all chats</span>
+            </button>
             <a
               className="ecg-bulk-menu-item"
               href={ARCHIVE_PAGE_URL}
@@ -726,6 +756,18 @@ export function ConversationBulkManager(): ReactElement | null {
             >
               <ChatGptDataControlsIcon />
               <span className="ecg-bulk-menu-item-label">Archived chats</span>
+            </a>
+            <div className="ecg-bulk-menu-separator" role="separator" />
+            <a
+              className="ecg-bulk-menu-item"
+              href={SUPPORT_EXTENSION_URL}
+              rel="noreferrer"
+              role="menuitem"
+              target="_blank"
+              onClick={() => setIsArchiveMenuOpen(false)}
+            >
+              <HeartIcon />
+              <span className="ecg-bulk-menu-item-label">Support this extension</span>
             </a>
           </div>,
           document.body
@@ -759,49 +801,38 @@ export function ConversationBulkManager(): ReactElement | null {
       {actionControls}
       {archiveMenu}
       {toastElement}
-      <AlertDialog.Root
+      <AlertModal
+        contentClassName="ecg-bulk-dialog"
+        description={dialogDescription}
+        descriptionClassName="ecg-bulk-dialog-description"
+        disableEscape={isBulkRunning}
+        initialFocusRef={bulkDialog?.status === "confirm" ? bulkCancelRef : undefined}
         open={bulkDialog !== null}
-        onOpenChange={(open) => {
-          if (!open && !isBulkRunning) {
-            setBulkDialog(null);
-          }
-        }}
+        overlayClassName="ecg-bulk-dialog-overlay"
+        title={dialogTitle}
+        titleClassName="ecg-bulk-dialog-title"
+        onClose={closeBulkDialog}
       >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="ecg-bulk-dialog-overlay" />
-          <AlertDialog.Content
-            className="ecg-bulk-dialog"
-            onEscapeKeyDown={(event) => {
-              if (isBulkRunning) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <AlertDialog.Title className="ecg-bulk-dialog-title">
-              {dialogTitle}
-            </AlertDialog.Title>
-            <AlertDialog.Description className="ecg-bulk-dialog-description">
-              {dialogDescription}
-            </AlertDialog.Description>
-            {bulkDialog?.status === "running" ? (
-              <div aria-hidden="true" className="ecg-bulk-dialog-progress">
-                <span className="ecg-bulk-dialog-spinner" />
-              </div>
-            ) : (
-              <div className="ecg-bulk-dialog-actions">
-                <AlertDialog.Cancel asChild>
-                  <button className="ecg-bulk-dialog-secondary" type="button">
-                    Cancel
-                  </button>
-                </AlertDialog.Cancel>
-                <button className="ecg-bulk-dialog-danger" type="button" onClick={confirmBulkAction}>
-                  {bulkDialog?.status === "confirm" ? actionLabel(bulkDialog.action) : "Confirm"}
-                </button>
-              </div>
-            )}
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+        {bulkDialog?.status === "running" ? (
+          <div aria-hidden="true" className="ecg-bulk-dialog-progress">
+            <span className="ecg-bulk-dialog-spinner" />
+          </div>
+        ) : (
+          <div className="ecg-bulk-dialog-actions">
+            <button
+              className="ecg-bulk-dialog-secondary"
+              ref={bulkCancelRef}
+              type="button"
+              onClick={closeBulkDialog}
+            >
+              Cancel
+            </button>
+            <button className="ecg-bulk-dialog-danger" type="button" onClick={confirmBulkAction}>
+              {bulkDialog?.status === "confirm" ? actionLabel(bulkDialog.action) : "Confirm"}
+            </button>
+          </div>
+        )}
+      </AlertModal>
     </>
   );
 }
