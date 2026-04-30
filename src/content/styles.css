@@ -104,6 +104,19 @@
   background: transparent;
 }
 
+.ecg-bulk-manager-icon {
+  background: currentColor;
+  display: block;
+  height: 18px;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  width: 18px;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
 .ecg-conversation-checkbox {
   align-items: center;
   background: transparent;

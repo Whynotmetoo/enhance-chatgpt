@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ARCHIVE_PAGE_URL } from "../../shared/constants";
-import { ArchiveIcon, ArchivePageIcon, DeleteIcon, PluginIcon } from "../lib/icons";
+import { ArchiveIcon, ArchivePageIcon, DeleteIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 
 type ConversationItem = {
@@ -22,12 +22,23 @@ const headerSelectHostAttribute = "data-ecg-bulk-select-host";
 const recentsButtonClass = "ecg-recents-trigger";
 const rowClass = "ecg-conversation-row";
 const selectedRowClass = "ecg-conversation-row-selected";
+const bulkManagerIconPath = "icons/icon-transparent.svg";
+
+type ExtensionGlobal = typeof globalThis & {
+  browser?: { runtime?: { getURL?: (path: string) => string } };
+  chrome?: { runtime?: { getURL?: (path: string) => string } };
+};
 
 type HeaderControls = {
   actionsHost: HTMLElement;
   recentsButton: HTMLButtonElement;
   selectHost: HTMLElement;
 };
+
+function extensionResourceUrl(path: string): string {
+  const scope = globalThis as ExtensionGlobal;
+  return (scope.chrome ?? scope.browser)?.runtime?.getURL?.(path) ?? path;
+}
 
 function findSidebar(): HTMLElement | null {
   return (
@@ -372,7 +383,14 @@ export function ConversationBulkManager(): ReactElement | null {
             type="button"
             onClick={() => setIsSelectionModeActive((value) => !value)}
           >
-            <PluginIcon />
+            <span
+              aria-hidden="true"
+              className="ecg-bulk-manager-icon"
+              style={{
+                WebkitMaskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`,
+                maskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`
+              }}
+            />
           </button>
           {isSelectionModeActive ? (
             <>
