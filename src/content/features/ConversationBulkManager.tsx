@@ -403,7 +403,7 @@ export function ConversationBulkManager(): ReactElement | null {
     };
 
     document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    document.addEventListener("keydown", closeOn～Escape, true);
+    document.addEventListener("keydown", closeOnEscape, true);
 
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
