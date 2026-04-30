@@ -1,9 +1,9 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import type { ReactElement } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ARCHIVE_PAGE_URL } from "../../shared/constants";
-import { ArchivePageIcon, ChatGptArchiveIcon, ChatGptTrashIcon } from "../lib/icons";
+import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 
 type ConversationItem = {
@@ -33,6 +33,11 @@ type HeaderControls = {
   actionsHost: HTMLElement;
   recentsButton: HTMLButtonElement;
   selectHost: HTMLElement;
+};
+
+type ArchiveMenuPosition = {
+  left: number;
+  top: number;
 };
 
 function extensionResourceUrl(path: string): string {
@@ -215,8 +220,13 @@ export function ConversationBulkManager(): ReactElement | null {
   const [headerControls, setHeaderControls] = useState<HeaderControls | null>(null);
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
+  const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
+  const [archiveMenuPosition, setArchiveMenuPosition] = useState<ArchiveMenuPosition | null>(null);
   const [pendingAction, setPendingAction] = useState<BulkAction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const archiveMenuRootRef = useRef<HTMLDivElement>(null);
+  const archiveMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const archiveMenuRef = useRef<HTMLDivElement>(null);
 
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)),
@@ -330,6 +340,77 @@ export function ConversationBulkManager(): ReactElement | null {
     }
   }, [isSelectionModeActive]);
 
+  useEffect(() => {
+    if (!headerControls) {
+      setIsArchiveMenuOpen(false);
+    }
+  }, [headerControls]);
+
+  useEffect(() => {
+    if (!isArchiveMenuOpen) {
+      setArchiveMenuPosition(null);
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      const trigger = archiveMenuTriggerRef.current;
+      if (!trigger) {
+        setArchiveMenuPosition(null);
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = 188;
+      const viewportPadding = 8;
+      const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding);
+      const left = Math.min(Math.max(rect.left - 8, viewportPadding), maxLeft);
+      const top = Math.max(rect.bottom + 6, viewportPadding);
+
+      setArchiveMenuPosition({ left, top });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isArchiveMenuOpen]);
+
+  useEffect(() => {
+    if (!isArchiveMenuOpen) {
+      return undefined;
+    }
+
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && archiveMenuRootRef.current?.contains(target)) {
+        return;
+      }
+      if (target instanceof Node && archiveMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsArchiveMenuOpen(false);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsArchiveMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+    document.addEventListener("keydown", closeOn～Escape, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [isArchiveMenuOpen]);
+
   const toggleAllVisibleConversations = () => {
     setSelectedIds((current) => {
       if (items.length > 0 && current.size === items.length) {
@@ -414,24 +495,56 @@ export function ConversationBulkManager(): ReactElement | null {
               </button>
             </>
           ) : null}
-          <a
-            aria-label="Open ChatGPT Archive management"
-            className="ecg-bulk-action-button"
-            href={ARCHIVE_PAGE_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <ArchivePageIcon />
-          </a>
+          <div className="ecg-bulk-menu-root" ref={archiveMenuRootRef}>
+            <button
+              aria-expanded={isArchiveMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Open archive options"
+              className="ecg-bulk-action-button"
+              data-active={isArchiveMenuOpen}
+              ref={archiveMenuTriggerRef}
+              type="button"
+              onClick={() => setIsArchiveMenuOpen((value) => !value)}
+            >
+              <ChatGptMoreIcon />
+            </button>
+          </div>
         </div>,
         headerControls.actionsHost
       )
     : null;
 
+  const archiveMenu =
+    isArchiveMenuOpen && archiveMenuPosition
+      ? createPortal(
+          <div
+            aria-label="Archive options"
+            className="ecg-bulk-menu"
+            ref={archiveMenuRef}
+            role="menu"
+            style={{ left: archiveMenuPosition.left, top: archiveMenuPosition.top }}
+          >
+            <a
+              className="ecg-bulk-menu-item"
+              href={ARCHIVE_PAGE_URL}
+              rel="noreferrer"
+              role="menuitem"
+              target="_blank"
+              onClick={() => setIsArchiveMenuOpen(false)}
+            >
+              <ChatGptDataControlsIcon />
+              <span className="ecg-bulk-menu-item-label">Archived chats</span>
+            </a>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <>
       {selectAllControl}
       {actionControls}
+      {archiveMenu}
       <AlertDialog.Root open={pendingAction !== null} onOpenChange={(open) => !open && setPendingAction(null)}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="ecg-prompt-alert-overlay" />

@@ -130,6 +130,53 @@
   -webkit-mask-size: contain;
 }
 
+.ecg-bulk-menu-root {
+  display: inline-flex;
+}
+
+.ecg-bulk-menu {
+  background: var(--main-surface-primary, var(--ecg-surface-strong));
+  border-radius: 16px;
+  box-shadow: 0 8px 12px rgb(0 0 0 / 8%), 0 0 1px rgb(0 0 0 / 62%);
+  color: var(--text-primary, var(--ecg-text));
+  min-width: 188px;
+  padding: 6px 0;
+  pointer-events: auto;
+  position: fixed;
+  user-select: none;
+  z-index: 2147483647;
+}
+
+.ecg-bulk-menu-item {
+  align-items: center;
+  border-radius: 10px;
+  color: inherit;
+  display: flex;
+  font-size: 14px;
+  gap: 6px;
+  line-height: 20px;
+  margin: 0 6px;
+  min-height: 36px;
+  padding: 6px 32px 6px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ecg-bulk-menu-item:hover,
+.ecg-bulk-menu-item:focus-visible {
+  background: var(--surface-hover, var(--ecg-hover));
+  outline: none;
+}
+
+.ecg-bulk-menu-item svg {
+  flex: 0 0 auto;
+}
+
+.ecg-bulk-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ecg-conversation-checkbox {
   align-items: center;
   background: transparent;
