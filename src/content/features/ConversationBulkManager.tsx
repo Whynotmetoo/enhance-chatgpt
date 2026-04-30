@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ARCHIVE_PAGE_URL } from "../../shared/constants";
 import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
+import { performConversationActionInPageContext } from "../lib/chatGptApiBridge";
 
 type ConversationItem = {
   id: string;
@@ -14,6 +15,34 @@ type ConversationItem = {
 };
 
 type BulkAction = "delete" | "archive";
+
+type BulkFailure = {
+  error: string;
+  id: string;
+  status?: number;
+  title: string;
+};
+
+type BulkDialogState =
+  | {
+      action: BulkAction;
+      items: ConversationItem[];
+      status: "confirm";
+    }
+  | {
+      action: BulkAction;
+      failed: BulkFailure[];
+      remaining: number;
+      status: "running";
+      succeeded: number;
+      total: number;
+    };
+
+type BulkToast = {
+  id: number;
+  message: string;
+  tone: "info" | "error";
+};
 
 const checkboxClass = "ecg-conversation-checkbox";
 const headerActionsHostAttribute = "data-ecg-bulk-actions-host";
@@ -201,19 +230,62 @@ function clearHeaderControls(): void {
   });
 }
 
-function dispatchBulkAction(action: BulkAction, items: ConversationItem[]): void {
-  window.dispatchEvent(
-    new CustomEvent("ecg:bulk-conversation-action", {
-      detail: {
-        action,
-        conversations: items.map(({ id, title, href }) => ({ id, title, href }))
-      }
-    })
-  );
-}
-
 function actionLabel(action: BulkAction): string {
   return action === "delete" ? "Delete" : "Archive";
+}
+
+function actionProgressLabel(action: BulkAction): string {
+  return action === "delete" ? "Deleting" : "Archiving";
+}
+
+function actionPastLabel(action: BulkAction): string {
+  return action === "delete" ? "Deleted" : "Archived";
+}
+
+function pluralizeConversation(count: number): string {
+  return `${count} conversation${count === 1 ? "" : "s"}`;
+}
+
+function currentConversationId(): string | null {
+  return conversationIdFromHref(window.location.href);
+}
+
+function findNewConversationElement(): HTMLElement | null {
+  const selectors = [
+    "a[aria-label*='New chat' i]",
+    "button[aria-label*='New chat' i]",
+    "a[href='/']",
+    "a[href='https://chatgpt.com/']",
+    "a[href='https://chat.openai.com/']"
+  ];
+
+  for (const selector of selectors) {
+    const element = Array.from(document.querySelectorAll<HTMLElement>(selector)).find(isVisible);
+    if (element) {
+      return element;
+    }
+  }
+
+  return null;
+}
+
+function navigateToNewConversation(): void {
+  const target = findNewConversationElement();
+  if (target) {
+    target.click();
+    return;
+  }
+
+  window.history.pushState(null, "", "/");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function removeConversationItem(item: ConversationItem): void {
+  item.row.remove();
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Conversation action failed";
 }
 
 export function ConversationBulkManager(): ReactElement | null {
@@ -222,11 +294,13 @@ export function ConversationBulkManager(): ReactElement | null {
   const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
   const [archiveMenuPosition, setArchiveMenuPosition] = useState<ArchiveMenuPosition | null>(null);
-  const [pendingAction, setPendingAction] = useState<BulkAction | null>(null);
+  const [bulkDialog, setBulkDialog] = useState<BulkDialogState | null>(null);
+  const [toast, setToast] = useState<BulkToast | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const archiveMenuRootRef = useRef<HTMLDivElement>(null);
   const archiveMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
+  const bulkAbortControllerRef = useRef<AbortController | null>(null);
 
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)),
@@ -235,6 +309,7 @@ export function ConversationBulkManager(): ReactElement | null {
   const hasSelectedItems = selectedItems.length > 0;
   const allVisibleSelected = items.length > 0 && selectedIds.size === items.length;
   const partiallySelected = selectedIds.size > 0 && !allVisibleSelected;
+  const isBulkRunning = bulkDialog?.status === "running";
 
   useEffect(() => {
     const update = () => {
@@ -292,6 +367,10 @@ export function ConversationBulkManager(): ReactElement | null {
       event.preventDefault();
       event.stopPropagation();
 
+      if (isBulkRunning) {
+        return;
+      }
+
       const id = checkbox.dataset.ecgConversationId;
       setSelectedIds((current) => {
         const next = new Set(current);
@@ -306,7 +385,7 @@ export function ConversationBulkManager(): ReactElement | null {
 
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
-  }, []);
+  }, [isBulkRunning]);
 
   useEffect(() => {
     document.documentElement.toggleAttribute("data-ecg-bulk-active", isSelectionModeActive);
@@ -336,15 +415,17 @@ export function ConversationBulkManager(): ReactElement | null {
   useEffect(() => {
     if (!isSelectionModeActive) {
       setSelectedIds(new Set());
-      setPendingAction(null);
+      if (!isBulkRunning) {
+        setBulkDialog(null);
+      }
     }
-  }, [isSelectionModeActive]);
+  }, [isBulkRunning, isSelectionModeActive]);
 
   useEffect(() => {
-    if (!headerControls) {
+    if (!headerControls || isBulkRunning) {
       setIsArchiveMenuOpen(false);
     }
-  }, [headerControls]);
+  }, [headerControls, isBulkRunning]);
 
   useEffect(() => {
     if (!isArchiveMenuOpen) {
@@ -411,7 +492,24 @@ export function ConversationBulkManager(): ReactElement | null {
     };
   }, [isArchiveMenuOpen]);
 
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setToast(null), 4_500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    return () => bulkAbortControllerRef.current?.abort();
+  }, []);
+
   const toggleAllVisibleConversations = () => {
+    if (isBulkRunning) {
+      return;
+    }
+
     setSelectedIds((current) => {
       if (items.length > 0 && current.size === items.length) {
         return new Set();
@@ -422,16 +520,103 @@ export function ConversationBulkManager(): ReactElement | null {
   };
 
   const requestBulkAction = (action: BulkAction) => {
-    if (hasSelectedItems) {
-      setPendingAction(action);
+    if (hasSelectedItems && !isBulkRunning) {
+      setBulkDialog({ action, items: selectedItems, status: "confirm" });
+    }
+  };
+
+  const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[]) => {
+    const successMessage = `${actionPastLabel(action)} ${pluralizeConversation(succeeded)}.`;
+    const failureMessage =
+      failed.length > 0
+        ? ` ${failed.length} failed${failed[0]?.error ? `: ${failed[0].error}` : "."}`
+        : "";
+
+    setToast({
+      id: Date.now(),
+      message: `${successMessage}${failureMessage}`,
+      tone: failed.length > 0 ? "error" : "info"
+    });
+  };
+
+  const removeSucceededConversation = (item: ConversationItem) => {
+    removeConversationItem(item);
+    setItems((current) => current.filter((conversation) => conversation.id !== item.id));
+    setSelectedIds((current) => {
+      if (!current.has(item.id)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(item.id);
+      return next;
+    });
+  };
+
+  const runBulkAction = async (action: BulkAction, actionItems: ConversationItem[]) => {
+    const controller = new AbortController();
+    const activeConversationId = currentConversationId();
+    const succeededItems: ConversationItem[] = [];
+    const failed: BulkFailure[] = [];
+
+    bulkAbortControllerRef.current = controller;
+    setIsArchiveMenuOpen(false);
+    setBulkDialog({
+      action,
+      failed: [],
+      remaining: actionItems.length,
+      status: "running",
+      succeeded: 0,
+      total: actionItems.length
+    });
+
+    for (const item of actionItems) {
+      try {
+        const result = await performConversationActionInPageContext(item.id, action, controller.signal);
+        if (result.ok) {
+          succeededItems.push(item);
+          removeSucceededConversation(item);
+        } else {
+          failed.push({
+            error: result.error ?? `Request failed${result.status ? ` with status ${result.status}` : ""}`,
+            id: item.id,
+            status: result.status,
+            title: item.title
+          });
+        }
+      } catch (error) {
+        failed.push({
+          error: errorMessage(error),
+          id: item.id,
+          title: item.title
+        });
+      }
+
+      setBulkDialog({
+        action,
+        failed: [...failed],
+        remaining: actionItems.length - succeededItems.length - failed.length,
+        status: "running",
+        succeeded: succeededItems.length,
+        total: actionItems.length
+      });
+    }
+
+    bulkAbortControllerRef.current = null;
+    setBulkDialog(null);
+    showCompletionToast(action, succeededItems.length, failed);
+
+    if (activeConversationId && succeededItems.some((item) => item.id === activeConversationId)) {
+      navigateToNewConversation();
     }
   };
 
   const confirmBulkAction = () => {
-    if (pendingAction && selectedItems.length > 0) {
-      dispatchBulkAction(pendingAction, selectedItems);
+    if (bulkDialog?.status !== "confirm" || bulkDialog.items.length === 0) {
+      return;
     }
-    setPendingAction(null);
+
+    void runBulkAction(bulkDialog.action, bulkDialog.items);
   };
 
   const selectAllControl = headerControls
@@ -443,6 +628,7 @@ export function ConversationBulkManager(): ReactElement | null {
             className="ecg-conversation-checkbox ecg-conversation-select-all"
             data-mixed={partiallySelected ? "true" : undefined}
             data-selected={allVisibleSelected ? "true" : undefined}
+            disabled={isBulkRunning}
             type="button"
             onClick={toggleAllVisibleConversations}
           >
@@ -461,6 +647,7 @@ export function ConversationBulkManager(): ReactElement | null {
             aria-pressed={isSelectionModeActive}
             className="ecg-bulk-action-button"
             data-active={isSelectionModeActive}
+            disabled={isBulkRunning}
             type="button"
             onClick={() => setIsSelectionModeActive((value) => !value)}
           >
@@ -478,7 +665,7 @@ export function ConversationBulkManager(): ReactElement | null {
               <button
                 aria-label="Delete selected conversations"
                 className="ecg-bulk-action-button ecg-bulk-native-action-button"
-                disabled={!hasSelectedItems}
+                disabled={!hasSelectedItems || isBulkRunning}
                 type="button"
                 onClick={() => requestBulkAction("delete")}
               >
@@ -487,7 +674,7 @@ export function ConversationBulkManager(): ReactElement | null {
               <button
                 aria-label="Archive selected conversations"
                 className="ecg-bulk-action-button ecg-bulk-native-action-button"
-                disabled={!hasSelectedItems}
+                disabled={!hasSelectedItems || isBulkRunning}
                 type="button"
                 onClick={() => requestBulkAction("archive")}
               >
@@ -502,6 +689,7 @@ export function ConversationBulkManager(): ReactElement | null {
               aria-label="Open archive options"
               className="ecg-bulk-action-button"
               data-active={isArchiveMenuOpen}
+              disabled={isBulkRunning}
               ref={archiveMenuTriggerRef}
               type="button"
               onClick={() => setIsArchiveMenuOpen((value) => !value)}
@@ -540,27 +728,73 @@ export function ConversationBulkManager(): ReactElement | null {
         )
       : null;
 
+  const dialogTitle =
+    bulkDialog?.status === "running"
+      ? `${actionProgressLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.remaining)}...`
+      : bulkDialog?.status === "confirm"
+        ? `${actionLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.items.length)}?`
+        : "Confirm batch action";
+  const dialogDescription =
+    bulkDialog?.status === "running"
+      ? `${bulkDialog.remaining} of ${bulkDialog.total} remaining. Do not close this page until the operation finishes.`
+      : bulkDialog?.status === "confirm"
+        ? `This will ${bulkDialog.action} ${pluralizeConversation(bulkDialog.items.length)}.`
+        : "";
+  const toastElement = toast
+    ? createPortal(
+        <div className="ecg-bulk-toast" data-tone={toast.tone} key={toast.id} role="status">
+          {toast.message}
+        </div>,
+        document.body
+      )
+    : null;
+
   return (
     <>
       {selectAllControl}
       {actionControls}
       {archiveMenu}
-      <AlertDialog.Root open={pendingAction !== null} onOpenChange={(open) => !open && setPendingAction(null)}>
+      {toastElement}
+      <AlertDialog.Root
+        open={bulkDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !isBulkRunning) {
+            setBulkDialog(null);
+          }
+        }}
+      >
         <AlertDialog.Portal>
-          <AlertDialog.Overlay className="ecg-prompt-alert-overlay" />
-          <AlertDialog.Content className="ecg-prompt-alert">
-            <AlertDialog.Title className="ecg-prompt-alert-title">
-              {pendingAction ? `${actionLabel(pendingAction)} selected conversations?` : "Confirm batch action"}
+          <AlertDialog.Overlay className="ecg-bulk-dialog-overlay" />
+          <AlertDialog.Content
+            className="ecg-bulk-dialog"
+            onEscapeKeyDown={(event) => {
+              if (isBulkRunning) {
+                event.preventDefault();
+              }
+            }}
+          >
+            <AlertDialog.Title className="ecg-bulk-dialog-title">
+              {dialogTitle}
             </AlertDialog.Title>
-            <AlertDialog.Description className="ecg-prompt-alert-description">
-              {selectedItems.length} conversation{selectedItems.length === 1 ? "" : "s"} selected.
+            <AlertDialog.Description className="ecg-bulk-dialog-description">
+              {dialogDescription}
             </AlertDialog.Description>
-            <div className="ecg-prompt-alert-actions">
-              <AlertDialog.Cancel className="ecg-prompt-secondary">Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action className="ecg-prompt-danger" onClick={confirmBulkAction}>
-                Confirm
-              </AlertDialog.Action>
-            </div>
+            {bulkDialog?.status === "running" ? (
+              <div aria-hidden="true" className="ecg-bulk-dialog-progress">
+                <span className="ecg-bulk-dialog-spinner" />
+              </div>
+            ) : (
+              <div className="ecg-bulk-dialog-actions">
+                <AlertDialog.Cancel asChild>
+                  <button className="ecg-bulk-dialog-secondary" type="button">
+                    Cancel
+                  </button>
+                </AlertDialog.Cancel>
+                <button className="ecg-bulk-dialog-danger" type="button" onClick={confirmBulkAction}>
+                  {bulkDialog?.status === "confirm" ? actionLabel(bulkDialog.action) : "Confirm"}
+                </button>
+              </div>
+            )}
           </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>

@@ -265,8 +265,155 @@
   color: var(--ecg-text);
 }
 
+.ecg-conversation-checkbox:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.ecg-conversation-checkbox:disabled:hover {
+  background: transparent;
+  color: var(--ecg-text-soft);
+}
+
 .ecg-conversation-row-selected {
   background: color-mix(in srgb, var(--ecg-focus) 8%, transparent) !important;
+}
+
+.ecg-bulk-dialog-overlay {
+  background: rgb(0 0 0 / 28%);
+  inset: 0;
+  pointer-events: auto;
+  position: fixed;
+  z-index: 2147483203;
+}
+
+.ecg-bulk-dialog {
+  background: var(--main-surface-primary, var(--ecg-surface-strong));
+  border: 1px solid var(--border-light, var(--ecg-line));
+  border-radius: 18px;
+  box-shadow: 0 14px 38px rgb(0 0 0 / 18%), 0 0 1px rgb(0 0 0 / 34%);
+  box-sizing: border-box;
+  color: var(--text-primary, var(--ecg-text));
+  display: grid;
+  gap: 12px;
+  left: 50%;
+  max-width: min(384px, calc(100vw - 32px));
+  padding: 20px;
+  pointer-events: auto;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  z-index: 2147483204;
+}
+
+.ecg-bulk-dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.28;
+  margin: 0;
+}
+
+.ecg-bulk-dialog-description {
+  color: var(--text-secondary, var(--ecg-text-muted));
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.ecg-bulk-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.ecg-bulk-dialog-secondary,
+.ecg-bulk-dialog-danger {
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  height: 38px;
+  justify-content: center;
+  letter-spacing: 0;
+  min-width: 82px;
+  padding: 0 16px;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+.ecg-bulk-dialog-secondary {
+  background: var(--button-secondary-background, var(--ecg-hover));
+  color: var(--text-primary, var(--ecg-text));
+}
+
+.ecg-bulk-dialog-secondary:hover,
+.ecg-bulk-dialog-secondary:focus-visible {
+  background: color-mix(in srgb, CanvasText 11%, transparent);
+  outline: none;
+}
+
+.ecg-bulk-dialog-danger {
+  background: #d92d20;
+  color: white;
+}
+
+.ecg-bulk-dialog-danger:hover,
+.ecg-bulk-dialog-danger:focus-visible {
+  background: #b42318;
+  outline: none;
+}
+
+.ecg-bulk-dialog-progress {
+  align-items: center;
+  display: flex;
+  height: 38px;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.ecg-bulk-dialog-spinner {
+  animation: ecg-bulk-spin 820ms linear infinite;
+  border: 2px solid color-mix(in srgb, CanvasText 14%, transparent);
+  border-radius: 999px;
+  border-top-color: var(--text-primary, var(--ecg-text));
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+
+.ecg-bulk-toast {
+  background: var(--main-surface-primary, var(--ecg-surface-strong));
+  border: 1px solid var(--border-light, var(--ecg-line));
+  border-radius: 12px;
+  bottom: 18px;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 16%), 0 0 1px rgb(0 0 0 / 42%);
+  box-sizing: border-box;
+  color: var(--text-primary, var(--ecg-text));
+  font-size: 13px;
+  left: 12px;
+  line-height: 1.35;
+  max-width: min(316px, calc(100vw - 24px));
+  padding: 10px 12px;
+  pointer-events: none;
+  position: fixed;
+  width: max-content;
+  z-index: 2147483202;
+}
+
+.ecg-bulk-toast[data-tone="error"] {
+  border-color: color-mix(in srgb, #d92d20 45%, var(--ecg-line));
+}
+
+@keyframes ecg-bulk-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ecg-prompt-composer-anchor {

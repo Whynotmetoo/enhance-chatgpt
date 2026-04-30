@@ -1,6 +1,8 @@
 const pageContextScript = "page-context.js";
 const requestSource = "enhance-chatgpt:fetch-conversation";
 const responseSource = "enhance-chatgpt:fetch-conversation-response";
+const conversationActionRequestSource = "enhance-chatgpt:conversation-action";
+const conversationActionResponseSource = "enhance-chatgpt:conversation-action-response";
 const conversationActivitySource = "enhance-chatgpt:conversation-activity";
 
 export type ConversationActivity = {
@@ -25,6 +27,26 @@ type PageConversationResponse = {
   status?: unknown;
   body?: unknown;
   error?: unknown;
+};
+
+export type ConversationAction = "delete" | "archive";
+
+export type ConversationActionResult = {
+  action: ConversationAction;
+  conversationId: string;
+  error?: string;
+  ok: boolean;
+  status?: number;
+};
+
+type PageConversationActionResponse = {
+  source?: unknown;
+  requestId?: unknown;
+  action?: unknown;
+  conversationId?: unknown;
+  error?: unknown;
+  ok?: unknown;
+  status?: unknown;
 };
 
 let installed = false;
@@ -191,6 +213,70 @@ export function fetchConversationInPageContext(
         requestId,
         conversationId,
         minCapturedAt
+      },
+      window.location.origin
+    );
+  });
+}
+
+export function performConversationActionInPageContext(
+  conversationId: string,
+  action: ConversationAction,
+  signal: AbortSignal
+): Promise<ConversationActionResult> {
+  installChatGptApiBridge();
+
+  if (signal.aborted) {
+    return Promise.reject(new Error("Conversation action aborted"));
+  }
+
+  const requestId = `conversation-action-${Date.now()}-${requestCounter}`;
+  requestCounter += 1;
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      window.removeEventListener("message", handleMessage);
+    };
+    const abort = () => {
+      cleanup();
+      reject(new Error("Conversation action aborted"));
+    };
+    const fail = (message: string) => {
+      cleanup();
+      reject(new Error(message));
+    };
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== window || event.origin !== window.location.origin || !isRecord(event.data)) {
+        return;
+      }
+
+      const data = event.data as PageConversationActionResponse;
+      if (data.source !== conversationActionResponseSource || data.requestId !== requestId) {
+        return;
+      }
+
+      cleanup();
+
+      resolve({
+        action,
+        conversationId,
+        error: typeof data.error === "string" ? data.error : undefined,
+        ok: data.ok === true,
+        status: typeof data.status === "number" ? data.status : undefined
+      });
+    };
+    const timer = window.setTimeout(() => fail("Conversation action timed out"), 12_000);
+
+    signal.addEventListener("abort", abort, { once: true });
+    window.addEventListener("message", handleMessage);
+    window.postMessage(
+      {
+        source: conversationActionRequestSource,
+        requestId,
+        action,
+        conversationId
       },
       window.location.origin
     );
