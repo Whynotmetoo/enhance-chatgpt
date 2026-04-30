@@ -104,6 +104,19 @@
   background: transparent;
 }
 
+.ecg-bulk-native-action-button {
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+}
+
+.ecg-bulk-native-action-button:hover,
+.ecg-bulk-native-action-button:focus-visible {
+  color: CanvasText;
+}
+
+.ecg-bulk-native-action-button:disabled {
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+}
+
 .ecg-bulk-manager-icon {
   background: currentColor;
   display: block;

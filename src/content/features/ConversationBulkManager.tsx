@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ARCHIVE_PAGE_URL } from "../../shared/constants";
-import { ArchiveIcon, ArchivePageIcon, DeleteIcon } from "../lib/icons";
+import { ArchivePageIcon, ChatGptArchiveIcon, ChatGptTrashIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
 
 type ConversationItem = {
@@ -396,21 +396,21 @@ export function ConversationBulkManager(): ReactElement | null {
             <>
               <button
                 aria-label="Delete selected conversations"
-                className="ecg-bulk-action-button"
+                className="ecg-bulk-action-button ecg-bulk-native-action-button"
                 disabled={!hasSelectedItems}
                 type="button"
                 onClick={() => requestBulkAction("delete")}
               >
-                <DeleteIcon />
+                <ChatGptTrashIcon />
               </button>
               <button
                 aria-label="Archive selected conversations"
-                className="ecg-bulk-action-button"
+                className="ecg-bulk-action-button ecg-bulk-native-action-button"
                 disabled={!hasSelectedItems}
                 type="button"
                 onClick={() => requestBulkAction("archive")}
               >
-                <ArchiveIcon />
+                <ChatGptArchiveIcon />
               </button>
             </>
           ) : null}
