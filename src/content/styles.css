@@ -22,6 +22,161 @@
   position: relative !important;
 }
 
+.ecg-recents-header-row {
+  align-items: center !important;
+  box-sizing: border-box;
+  display: flex !important;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 6px;
+  width: 100%;
+}
+
+.ecg-recents-trigger {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+:root[data-ecg-bulk-active] .ecg-recents-trigger {
+  padding-left: 4px !important;
+}
+
+[data-ecg-bulk-select-host],
+[data-ecg-bulk-actions-host] {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+[data-ecg-bulk-select-host] {
+  margin-left: 8px;
+}
+
+[data-ecg-bulk-select-host]:empty {
+  display: none;
+  margin-left: 0;
+}
+
+[data-ecg-bulk-actions-host] {
+  margin-left: auto;
+}
+
+.ecg-bulk-header-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.ecg-bulk-action-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--ecg-text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  text-decoration: none;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+  width: 26px;
+}
+
+.ecg-bulk-action-button:hover,
+.ecg-bulk-action-button:focus-visible,
+.ecg-bulk-action-button[data-active="true"] {
+  background: var(--ecg-hover);
+  color: var(--ecg-text);
+  outline: none;
+}
+
+.ecg-bulk-action-button:disabled {
+  color: var(--ecg-text-soft);
+  cursor: default;
+  opacity: 0.34;
+}
+
+.ecg-bulk-action-button:disabled:hover {
+  background: transparent;
+}
+
+.ecg-bulk-native-action-button {
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+}
+
+.ecg-bulk-native-action-button:hover,
+.ecg-bulk-native-action-button:focus-visible {
+  color: CanvasText;
+}
+
+.ecg-bulk-native-action-button:disabled {
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+}
+
+.ecg-bulk-manager-icon {
+  background: currentColor;
+  display: block;
+  height: 18px;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  width: 18px;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.ecg-bulk-menu-root {
+  display: inline-flex;
+}
+
+.ecg-bulk-menu {
+  background: var(--main-surface-primary, var(--ecg-surface-strong));
+  border-radius: 16px;
+  box-shadow: 0 8px 12px rgb(0 0 0 / 8%), 0 0 1px rgb(0 0 0 / 62%);
+  color: var(--text-primary, var(--ecg-text));
+  min-width: 188px;
+  padding: 6px 0;
+  pointer-events: auto;
+  position: fixed;
+  user-select: none;
+  z-index: 2147483647;
+}
+
+.ecg-bulk-menu-item {
+  align-items: center;
+  border-radius: 10px;
+  color: inherit;
+  display: flex;
+  font-size: 14px;
+  gap: 6px;
+  line-height: 20px;
+  margin: 0 6px;
+  min-height: 36px;
+  padding: 6px 32px 6px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ecg-bulk-menu-item:hover,
+.ecg-bulk-menu-item:focus-visible {
+  background: var(--surface-hover, var(--ecg-hover));
+  outline: none;
+}
+
+.ecg-bulk-menu-item svg {
+  flex: 0 0 auto;
+}
+
+.ecg-bulk-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ecg-conversation-checkbox {
   align-items: center;
   background: transparent;
@@ -39,9 +194,17 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  transition: opacity 180ms ease, color 180ms ease, background-color 180ms ease;
+  transition: color 180ms ease, background-color 180ms ease;
   width: 24px;
   z-index: 3;
+}
+
+.ecg-conversation-select-all {
+  left: auto;
+  opacity: 1;
+  position: static;
+  top: auto;
+  transform: none;
 }
 
 .ecg-conversation-checkbox-mark {
@@ -70,9 +233,31 @@
   width: 4px;
 }
 
+.ecg-conversation-checkbox[data-mixed="true"] {
+  color: var(--ecg-focus);
+}
+
+.ecg-conversation-checkbox[data-mixed="true"] .ecg-conversation-checkbox-mark::after {
+  background: currentColor;
+  content: "";
+  height: 2px;
+  left: 3px;
+  position: absolute;
+  top: 5px;
+  width: 6px;
+}
+
 .ecg-conversation-row:hover .ecg-conversation-checkbox,
-:root[data-ecg-selection-active] .ecg-conversation-checkbox {
+:root[data-ecg-bulk-active] .ecg-conversation-checkbox {
   opacity: 1;
+}
+
+.ecg-conversation-row a[href*="/c/"] {
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+:root[data-ecg-bulk-active] .ecg-conversation-row a[href*="/c/"] {
+  padding-left: 32px !important;
 }
 
 .ecg-conversation-checkbox:hover {
@@ -82,82 +267,6 @@
 
 .ecg-conversation-row-selected {
   background: color-mix(in srgb, var(--ecg-focus) 8%, transparent) !important;
-}
-
-.ecg-action-bar {
-  align-items: center;
-  backdrop-filter: blur(14px);
-  background: var(--ecg-surface);
-  border: 1px solid var(--ecg-line);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 9%, transparent);
-  box-sizing: border-box;
-  display: flex;
-  gap: 4px;
-  padding: 5px;
-  pointer-events: auto;
-  position: fixed;
-  transition: opacity 180ms ease, transform 180ms ease;
-  z-index: 2147483201;
-}
-
-.ecg-action-count {
-  color: var(--ecg-text-muted);
-  font-size: 12px;
-  min-width: 26px;
-  padding: 0 4px 0 6px;
-}
-
-.ecg-action-button {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: var(--ecg-text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  height: 28px;
-  justify-content: center;
-  padding: 0;
-  transition: background-color 160ms ease, color 160ms ease;
-  width: 28px;
-}
-
-.ecg-action-button:hover,
-.ecg-action-button[aria-expanded="true"] {
-  background: var(--ecg-hover);
-  color: var(--ecg-text);
-}
-
-.ecg-more-wrap {
-  display: inline-flex;
-  position: relative;
-}
-
-.ecg-more-menu {
-  background: var(--ecg-surface-strong);
-  border: 1px solid var(--ecg-line);
-  border-radius: 10px;
-  box-shadow: var(--ecg-shadow);
-  min-width: 190px;
-  padding: 5px;
-  position: absolute;
-  right: 0;
-  top: 34px;
-}
-
-.ecg-more-menu a {
-  border-radius: 7px;
-  color: var(--ecg-text);
-  display: block;
-  font-size: 13px;
-  line-height: 1.35;
-  padding: 8px 9px;
-  text-decoration: none;
-}
-
-.ecg-more-menu a:hover {
-  background: var(--ecg-hover);
 }
 
 .ecg-prompt-composer-anchor {

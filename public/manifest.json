@@ -29,7 +29,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["page-context.js"],
+      "resources": ["page-context.js", "icons/icon-transparent.svg"],
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"]
     }
   ],
