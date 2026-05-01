@@ -83,6 +83,14 @@ export function ChatGptTrashIcon(props: IconProps): ReactElement {
   );
 }
 
+export function HeartIcon(props: IconProps): ReactElement {
+  return (
+    <IconBase {...props}>
+      <path d="M20.8 8.6c0 5.2-8.8 10-8.8 10s-8.8-4.8-8.8-10A4.8 4.8 0 0 1 12 5.9a4.8 4.8 0 0 1 8.8 2.7z" />
+    </IconBase>
+  );
+}
+
 export function DeleteIcon(props: IconProps): ReactElement {
   return (
     <IconBase {...props}>
