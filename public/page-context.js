@@ -10,6 +10,8 @@
   const responseSource = "enhance-chatgpt:fetch-conversation-response";
   const conversationActionRequestSource = "enhance-chatgpt:conversation-action";
   const conversationActionResponseSource = "enhance-chatgpt:conversation-action-response";
+  const clearAllConversationsRequestSource = "enhance-chatgpt:clear-all-conversations";
+  const clearAllConversationsResponseSource = "enhance-chatgpt:clear-all-conversations-response";
   const locationChangeSource = "enhance-chatgpt:location-changed";
   const conversationActivitySource = "enhance-chatgpt:conversation-activity";
   const conversationCache = new Map();
@@ -32,6 +34,10 @@
 
   function postConversationActionResponse(payload) {
     window.postMessage({ source: conversationActionResponseSource, ...payload }, window.location.origin);
+  }
+
+  function postClearAllConversationsResponse(payload) {
+    window.postMessage({ source: clearAllConversationsResponseSource, ...payload }, window.location.origin);
   }
 
   function postLocationChanged(changedAt = Date.now()) {
@@ -407,6 +413,62 @@
     }
   }
 
+  async function clearAllConversations(requestId) {
+    const path = "/backend-api/conversations";
+    const headers = {
+      "Content-Type": "application/json",
+      "x-openai-target-path": path,
+      "x-openai-target-route": "/backend-api/conversations"
+    };
+    forwardedBackendHeaderNames.forEach((name) => {
+      const value = backendApiHeaders.get(name);
+      if (value) {
+        headers[name] = value;
+      }
+    });
+
+    try {
+      const response = await window.fetch(path, {
+        body: JSON.stringify({ is_visible: false }),
+        credentials: "include",
+        headers,
+        method: "PATCH"
+      });
+
+      let error;
+      if (!response.ok) {
+        try {
+          const text = await response.clone().text();
+          error = text || `Clear all conversations failed: ${response.status}`;
+        } catch {
+          error = `Clear all conversations failed: ${response.status}`;
+        }
+      }
+
+      postConversationActivity(response.ok ? "response" : "error", {
+        action: "clear-all",
+        ok: response.ok,
+        status: response.status
+      });
+
+      postClearAllConversationsResponse({
+        requestId,
+        ok: response.ok,
+        status: response.status,
+        error
+      });
+    } catch (error) {
+      postConversationActivity("error", {
+        action: "clear-all"
+      });
+      postClearAllConversationsResponse({
+        requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : "Clear all conversations failed"
+      });
+    }
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) {
       return;
@@ -438,6 +500,11 @@
       }
 
       void performConversationAction(data.requestId, data.conversationId, data.action);
+      return;
+    }
+
+    if (data.source === clearAllConversationsRequestSource) {
+      void clearAllConversations(data.requestId);
     }
   });
 })();

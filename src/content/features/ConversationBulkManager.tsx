@@ -1,11 +1,11 @@
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ARCHIVE_PAGE_URL, SUPPORT_EXTENSION_URL } from "../../shared/constants";
+import { ARCHIVED_CHATS_SETTINGS_HASH, SUPPORT_EXTENSION_URL } from "../../shared/constants";
 import { AlertModal } from "../components/AlertModal";
 import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon, HeartIcon } from "../lib/icons";
 import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
-import { performConversationActionInPageContext } from "../lib/chatGptApiBridge";
+import { clearAllConversationsInPageContext, performConversationActionInPageContext } from "../lib/chatGptApiBridge";
 
 type ConversationItem = {
   id: string;
@@ -15,6 +15,7 @@ type ConversationItem = {
 };
 
 type BulkAction = "delete" | "archive";
+type BulkScope = "selected" | "all";
 
 type BulkFailure = {
   error: string;
@@ -27,12 +28,14 @@ type BulkDialogState =
   | {
       action: BulkAction;
       items: ConversationItem[];
+      scope: BulkScope;
       status: "confirm";
     }
   | {
       action: BulkAction;
       failed: BulkFailure[];
       remaining: number;
+      scope: BulkScope;
       status: "running";
       succeeded: number;
       total: number;
@@ -244,6 +247,10 @@ function actionProgressLabel(action: BulkAction): string {
 
 function actionPastLabel(action: BulkAction): string {
   return action === "delete" ? "Deleted" : "Archived";
+}
+
+function actionConfirmLabel(action: BulkAction): string {
+  return action === "delete" ? "Confirm deletion" : "Confirm archive";
 }
 
 function pluralizeConversation(count: number): string {
@@ -530,21 +537,24 @@ export function ConversationBulkManager(): ReactElement | null {
 
   const requestBulkAction = (action: BulkAction) => {
     if (hasSelectedItems && !isBulkRunning) {
-      setBulkDialog({ action, items: selectedItems, status: "confirm" });
+      setBulkDialog({ action, items: selectedItems, scope: "selected", status: "confirm" });
     }
   };
 
   const requestDeleteAllConversations = () => {
-    if (items.length === 0 || isBulkRunning) {
+    if (isBulkRunning) {
       return;
     }
 
     setIsArchiveMenuOpen(false);
-    setBulkDialog({ action: "delete", items, status: "confirm" });
+    setBulkDialog({ action: "delete", items, scope: "all", status: "confirm" });
   };
 
-  const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[]) => {
-    const successMessage = `${actionPastLabel(action)} ${pluralizeConversation(succeeded)}.`;
+  const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[], scope: BulkScope) => {
+    const successMessage =
+      action === "delete" && scope === "all" && failed.length === 0
+        ? "Deleted all chats."
+        : `${actionPastLabel(action)} ${pluralizeConversation(succeeded)}.`;
     const failureMessage =
       failed.length > 0
         ? ` ${failed.length} failed${failed[0]?.error ? `: ${failed[0].error}` : "."}`
@@ -571,7 +581,62 @@ export function ConversationBulkManager(): ReactElement | null {
     });
   };
 
-  const runBulkAction = async (action: BulkAction, actionItems: ConversationItem[]) => {
+  const runClearAllConversations = async (actionItems: ConversationItem[]) => {
+    const controller = new AbortController();
+    const activeConversationId = currentConversationId();
+    const failed: BulkFailure[] = [];
+
+    bulkAbortControllerRef.current = controller;
+    setIsArchiveMenuOpen(false);
+    setBulkDialog({
+      action: "delete",
+      failed: [],
+      remaining: 1,
+      scope: "all",
+      status: "running",
+      succeeded: 0,
+      total: 1
+    });
+
+    try {
+      const result = await clearAllConversationsInPageContext(controller.signal);
+      if (result.ok) {
+        actionItems.forEach(removeConversationItem);
+        setItems([]);
+        setSelectedIds(new Set());
+      } else {
+        failed.push({
+          error: result.error ?? `Request failed${result.status ? ` with status ${result.status}` : ""}`,
+          id: "__all__",
+          status: result.status,
+          title: "All chats"
+        });
+      }
+    } catch (error) {
+      failed.push({
+        error: errorMessage(error),
+        id: "__all__",
+        title: "All chats"
+      });
+    }
+
+    bulkAbortControllerRef.current = null;
+    setBulkDialog(null);
+    setIsSelectionModeActive(false);
+    setSelectedIds(new Set());
+    showCompletionToast("delete", failed.length === 0 ? actionItems.length : 0, failed, "all");
+
+    if (failed.length === 0 && activeConversationId) {
+      navigateToNewConversation();
+    }
+  };
+
+  const runBulkAction = async (action: BulkAction, actionItems: ConversationItem[], scope: BulkScope) => {
+    if (action === "delete" && scope === "all") {
+      await runClearAllConversations(actionItems);
+      return;
+    }
+
     const controller = new AbortController();
     const activeConversationId = currentConversationId();
     const succeededItems: ConversationItem[] = [];
@@ -583,6 +648,7 @@ export function ConversationBulkManager(): ReactElement | null {
       action,
       failed: [],
       remaining: actionItems.length,
+      scope,
       status: "running",
       succeeded: 0,
       total: actionItems.length
@@ -614,6 +680,7 @@ export function ConversationBulkManager(): ReactElement | null {
         action,
         failed: [...failed],
         remaining: actionItems.length - succeededItems.length - failed.length,
+        scope,
         status: "running",
         succeeded: succeededItems.length,
         total: actionItems.length
@@ -622,7 +689,9 @@ export function ConversationBulkManager(): ReactElement | null {
 
     bulkAbortControllerRef.current = null;
     setBulkDialog(null);
-    showCompletionToast(action, succeededItems.length, failed);
+    setIsSelectionModeActive(false);
+    setSelectedIds(new Set());
+    showCompletionToast(action, succeededItems.length, failed, scope);
 
     if (activeConversationId && succeededItems.some((item) => item.id === activeConversationId)) {
       navigateToNewConversation();
@@ -634,7 +703,7 @@ export function ConversationBulkManager(): ReactElement | null {
       return;
     }
 
-    void runBulkAction(bulkDialog.action, bulkDialog.items);
+    void runBulkAction(bulkDialog.action, bulkDialog.items, bulkDialog.scope);
   };
 
   const closeBulkDialog = () => {
@@ -738,7 +807,7 @@ export function ConversationBulkManager(): ReactElement | null {
           >
             <button
               className="ecg-bulk-menu-item ecg-bulk-menu-item-danger"
-              disabled={items.length === 0}
+              disabled={isBulkRunning}
               role="menuitem"
               type="button"
               onClick={requestDeleteAllConversations}
@@ -748,14 +817,16 @@ export function ConversationBulkManager(): ReactElement | null {
             </button>
             <a
               className="ecg-bulk-menu-item"
-              href={ARCHIVE_PAGE_URL}
-              rel="noreferrer"
+              href={ARCHIVED_CHATS_SETTINGS_HASH}
               role="menuitem"
-              target="_blank"
-              onClick={() => setIsArchiveMenuOpen(false)}
+              onClick={(event) => {
+                event.preventDefault();
+                setIsArchiveMenuOpen(false);
+                window.location.hash = ARCHIVED_CHATS_SETTINGS_HASH;
+              }}
             >
               <ChatGptDataControlsIcon />
-              <span className="ecg-bulk-menu-item-label">Archived chats</span>
+              <span className="ecg-bulk-menu-item-label">Manage archived chats</span>
             </a>
             <div className="ecg-bulk-menu-separator" role="separator" />
             <a
@@ -776,19 +847,34 @@ export function ConversationBulkManager(): ReactElement | null {
 
   const dialogTitle =
     bulkDialog?.status === "running"
-      ? `${actionProgressLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.remaining)}...`
+      ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
+        ? "Deleting all chats..."
+        : `${actionProgressLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.remaining)}...`
       : bulkDialog?.status === "confirm"
-        ? `${actionLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.items.length)}?`
+        ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
+          ? "Clear your chat history - are you sure?"
+          : `${actionLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.items.length)}?`
         : "Confirm batch action";
   const dialogDescription =
     bulkDialog?.status === "running"
-      ? `${bulkDialog.remaining} of ${bulkDialog.total} remaining. Do not close this page until the operation finishes.`
+      ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
+        ? "Do not close this page until the operation finishes."
+        : `${bulkDialog.remaining} of ${bulkDialog.total} remaining. Do not close this page until the operation finishes.`
       : bulkDialog?.status === "confirm"
-        ? `This will ${bulkDialog.action} ${pluralizeConversation(bulkDialog.items.length)}.`
+        ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
+          ? "This will delete all chats, including those in Projects and archived conversations."
+          : `This will ${bulkDialog.action} ${pluralizeConversation(bulkDialog.items.length)}.`
         : "";
+  const confirmButtonLabel =
+    bulkDialog?.status === "confirm" ? actionConfirmLabel(bulkDialog.action) : "Confirm";
   const toastElement = toast
     ? createPortal(
-        <div className="ecg-bulk-toast" data-tone={toast.tone} key={toast.id} role="status">
+        <div
+          className="ecg-bulk-toast"
+          data-tone={toast.tone}
+          key={toast.id}
+          role="status"
+        >
           {toast.message}
         </div>,
         document.body
@@ -828,7 +914,7 @@ export function ConversationBulkManager(): ReactElement | null {
               Cancel
             </button>
             <button className="ecg-bulk-dialog-danger" type="button" onClick={confirmBulkAction}>
-              {bulkDialog?.status === "confirm" ? actionLabel(bulkDialog.action) : "Confirm"}
+              {confirmButtonLabel}
             </button>
           </div>
         )}
