@@ -245,6 +245,10 @@ function actionProgressLabel(action: BulkAction): string {
   return action === "delete" ? "Deleting" : "Archiving";
 }
 
+function actionProgressTitle(action: BulkAction): string {
+  return `${actionProgressLabel(action)} chats...`;
+}
+
 function actionPastLabel(action: BulkAction): string {
   return action === "delete" ? "Deleted" : "Archived";
 }
@@ -849,11 +853,13 @@ export function ConversationBulkManager(): ReactElement | null {
     bulkDialog?.status === "running"
       ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
         ? "Deleting all chats..."
-        : `${actionProgressLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.remaining)}...`
+        : actionProgressTitle(bulkDialog.action)
       : bulkDialog?.status === "confirm"
         ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
           ? "Clear your chat history - are you sure?"
-          : `${actionLabel(bulkDialog.action)} ${pluralizeConversation(bulkDialog.items.length)}?`
+          : bulkDialog.action === "delete"
+            ? "Delete chats?"
+            : "Archive chats"
         : "Confirm batch action";
   const dialogDescription =
     bulkDialog?.status === "running"

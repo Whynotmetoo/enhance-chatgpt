@@ -435,25 +435,53 @@
         method: "PATCH"
       });
 
+      let body;
       let error;
-      if (!response.ok) {
+      try {
+        body = await response.clone().json();
+      } catch {
+        body = null;
+      }
+
+      const succeeded = response.ok && body?.success === true;
+      if (!succeeded) {
         try {
           const text = await response.clone().text();
-          error = text || `Clear all conversations failed: ${response.status}`;
+          error = body?.message || text || `Clear all conversations failed: ${response.status}`;
         } catch {
-          error = `Clear all conversations failed: ${response.status}`;
+          error = body?.message || `Clear all conversations failed: ${response.status}`;
         }
       }
 
-      postConversationActivity(response.ok ? "response" : "error", {
+      if (succeeded) {
+        const refreshHeaders = {
+          "x-openai-target-path": "/backend-api/conversations",
+          "x-openai-target-route": "/backend-api/conversations"
+        };
+        forwardedBackendHeaderNames.forEach((name) => {
+          const value = backendApiHeaders.get(name);
+          if (value) {
+            refreshHeaders[name] = value;
+          }
+        });
+
+        void window
+          .fetch("/backend-api/conversations?offset=0&limit=28&order=updated&is_archived=false&is_starred=false", {
+            credentials: "include",
+            headers: refreshHeaders
+          })
+          .catch(() => undefined);
+      }
+
+      postConversationActivity(succeeded ? "response" : "error", {
         action: "clear-all",
-        ok: response.ok,
+        ok: succeeded,
         status: response.status
       });
 
       postClearAllConversationsResponse({
         requestId,
-        ok: response.ok,
+        ok: succeeded,
         status: response.status,
         error
       });
