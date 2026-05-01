@@ -4,300 +4,39 @@ import { createPortal } from "react-dom";
 import { ARCHIVED_CHATS_SETTINGS_HASH, SUPPORT_EXTENSION_URL } from "../../shared/constants";
 import { AlertModal } from "../components/AlertModal";
 import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon, HeartIcon } from "../lib/icons";
-import { conversationIdFromHref, debounce, isVisible } from "../lib/dom";
+import { debounce } from "../lib/dom";
 import { clearAllConversationsInPageContext, performConversationActionInPageContext } from "../lib/chatGptApiBridge";
-
-type ConversationItem = {
-  id: string;
-  title: string;
-  href: string;
-  row: HTMLElement;
-};
-
-type BulkAction = "delete" | "archive";
-type BulkScope = "selected" | "all";
-
-type BulkFailure = {
-  error: string;
-  id: string;
-  status?: number;
-  title: string;
-};
-
-type BulkDialogState =
-  | {
-      action: BulkAction;
-      items: ConversationItem[];
-      scope: BulkScope;
-      status: "confirm";
-    }
-  | {
-      action: BulkAction;
-      failed: BulkFailure[];
-      remaining: number;
-      scope: BulkScope;
-      status: "running";
-      succeeded: number;
-      total: number;
-    };
-
-type BulkToast = {
-  id: number;
-  message: string;
-  tone: "info" | "error";
-};
-
-const checkboxClass = "ecg-conversation-checkbox";
-const headerActionsHostAttribute = "data-ecg-bulk-actions-host";
-const headerClass = "ecg-recents-header-row";
-const headerSelectHostAttribute = "data-ecg-bulk-select-host";
-const recentsButtonClass = "ecg-recents-trigger";
-const rowClass = "ecg-conversation-row";
-const selectedRowClass = "ecg-conversation-row-selected";
-const bulkManagerIconPath = "icons/icon-transparent.svg";
-
-type ExtensionGlobal = typeof globalThis & {
-  browser?: { runtime?: { getURL?: (path: string) => string } };
-  chrome?: { runtime?: { getURL?: (path: string) => string } };
-};
-
-type HeaderControls = {
-  actionsHost: HTMLElement;
-  recentsButton: HTMLButtonElement;
-  selectHost: HTMLElement;
-};
-
-type ArchiveMenuPosition = {
-  left: number;
-  top: number;
-};
-
-function extensionResourceUrl(path: string): string {
-  const scope = globalThis as ExtensionGlobal;
-  try {
-    return (scope.chrome ?? scope.browser)?.runtime?.getURL?.(path) ?? path;
-  } catch {
-    return path;
-  }
-}
-
-function findSidebar(): HTMLElement | null {
-  return (
-    document.querySelector<HTMLElement>("[data-testid='sidebar']") ??
-    document.querySelector<HTMLElement>("nav[aria-label*='Chat']") ??
-    document.querySelector<HTMLElement>("aside") ??
-    document.querySelector<HTMLElement>("nav")
-  );
-}
-
-function isRecentsButton(button: HTMLButtonElement): boolean {
-  const label =
-    button.querySelector("h2.__menu-label")?.textContent?.trim() ??
-    button.textContent?.trim() ??
-    "";
-  return /^recents?$/i.test(label);
-}
-
-function findRecentsButton(sidebar: HTMLElement): HTMLButtonElement | null {
-  return (
-    Array.from(sidebar.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")).find(isRecentsButton) ??
-    null
-  );
-}
-
-function sameHeaderControls(current: HeaderControls | null, next: HeaderControls | null): boolean {
-  return (
-    current?.actionsHost === next?.actionsHost &&
-    current?.recentsButton === next?.recentsButton &&
-    current?.selectHost === next?.selectHost
-  );
-}
-
-function ensureHeaderControls(): HeaderControls | null {
-  const sidebar = findSidebar();
-  if (!sidebar) {
-    return null;
-  }
-
-  const recentsButton = findRecentsButton(sidebar);
-  const header = recentsButton?.parentElement ?? null;
-  if (!recentsButton || !header) {
-    return null;
-  }
-
-  header.classList.add(headerClass);
-  recentsButton.classList.add(recentsButtonClass);
-
-  let selectHost = header.querySelector<HTMLElement>(`[${headerSelectHostAttribute}]`);
-  if (!selectHost) {
-    selectHost = document.createElement("span");
-    selectHost.setAttribute(headerSelectHostAttribute, "true");
-    recentsButton.before(selectHost);
-  }
-
-  let actionsHost = header.querySelector<HTMLElement>(`[${headerActionsHostAttribute}]`);
-  if (!actionsHost) {
-    actionsHost = document.createElement("span");
-    actionsHost.setAttribute(headerActionsHostAttribute, "true");
-    recentsButton.after(actionsHost);
-  }
-
-  return { actionsHost, recentsButton, selectHost };
-}
-
-function rowForAnchor(anchor: HTMLAnchorElement): HTMLElement {
-  return (
-    anchor.closest<HTMLElement>("[role='listitem']") ??
-    anchor.closest<HTMLElement>("li") ??
-    anchor.parentElement ??
-    anchor
-  );
-}
-
-function collectConversationItems(): ConversationItem[] {
-  const sidebar = findSidebar();
-  if (!sidebar) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-
-  return Array.from(sidebar.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']"))
-    .map((anchor) => {
-      const id = conversationIdFromHref(anchor.href);
-      if (!id || seen.has(id) || !isVisible(anchor)) {
-        return null;
-      }
-
-      seen.add(id);
-
-      return {
-        id,
-        title: anchor.textContent?.trim() || "Untitled chat",
-        href: anchor.href,
-        row: rowForAnchor(anchor)
-      };
-    })
-    .filter((item): item is ConversationItem => Boolean(item));
-}
-
-function ensureCheckbox(item: ConversationItem): void {
-  let button = item.row.querySelector<HTMLButtonElement>(`.${checkboxClass}`);
-
-  if (!button) {
-    const mark = document.createElement("span");
-    button = document.createElement("button");
-    button.type = "button";
-    button.className = checkboxClass;
-    mark.className = "ecg-conversation-checkbox-mark";
-    button.append(mark);
-    item.row.append(button);
-  }
-
-  button.dataset.ecgConversationId = item.id;
-  button.setAttribute("aria-label", `Select conversation: ${item.title}`);
-
-  item.row.classList.add(rowClass);
-}
-
-function syncConversationCheckboxes(items: ConversationItem[]): void {
-  const itemRows = new Set(items.map((item) => item.row));
-
-  document.querySelectorAll<HTMLButtonElement>(`.${checkboxClass}[data-ecg-conversation-id]`).forEach((button) => {
-    const row = button.parentElement;
-    if (row && itemRows.has(row)) {
-      return;
-    }
-
-    button.remove();
-    row?.classList.remove(rowClass, selectedRowClass);
-  });
-
-  items.forEach(ensureCheckbox);
-}
-
-function clearConversationControls(): void {
-  document.querySelectorAll(`.${checkboxClass}[data-ecg-conversation-id]`).forEach((element) => element.remove());
-  document.querySelectorAll(`.${rowClass}`).forEach((element) => {
-    element.classList.remove(rowClass, selectedRowClass);
-  });
-}
-
-function clearHeaderControls(): void {
-  document
-    .querySelectorAll<HTMLElement>(`[${headerSelectHostAttribute}], [${headerActionsHostAttribute}]`)
-    .forEach((element) => {
-      element.remove();
-    });
-  document
-    .querySelectorAll<HTMLElement>(`.${headerClass}`)
-    .forEach((element) => element.classList.remove(headerClass));
-  document.querySelectorAll<HTMLElement>(`.${recentsButtonClass}`).forEach((element) => {
-    element.classList.remove(recentsButtonClass);
-  });
-}
-
-function actionLabel(action: BulkAction): string {
-  return action === "delete" ? "Delete" : "Archive";
-}
-
-function actionProgressLabel(action: BulkAction): string {
-  return action === "delete" ? "Deleting" : "Archiving";
-}
-
-function actionProgressTitle(action: BulkAction): string {
-  return `${actionProgressLabel(action)} chats...`;
-}
-
-function actionPastLabel(action: BulkAction): string {
-  return action === "delete" ? "Deleted" : "Archived";
-}
-
-function actionConfirmLabel(action: BulkAction): string {
-  return action === "delete" ? "Confirm deletion" : "Confirm archive";
-}
-
-function pluralizeConversation(count: number): string {
-  return `${count} conversation${count === 1 ? "" : "s"}`;
-}
-
-function currentConversationId(): string | null {
-  return conversationIdFromHref(window.location.href);
-}
-
-function findNewConversationElement(): HTMLElement | null {
-  const selectors = [
-    "a[aria-label*='New chat' i]",
-    "button[aria-label*='New chat' i]",
-    "a[href='/']",
-    "a[href='https://chatgpt.com/']",
-    "a[href='https://chat.openai.com/']"
-  ];
-
-  for (const selector of selectors) {
-    const element = Array.from(document.querySelectorAll<HTMLElement>(selector)).find(isVisible);
-    if (element) {
-      return element;
-    }
-  }
-
-  return null;
-}
-
-function navigateToNewConversation(): void {
-  const target = findNewConversationElement();
-  if (target) {
-    target.click();
-    return;
-  }
-
-  window.history.pushState(null, "", "/");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-function removeConversationItem(item: ConversationItem): void {
-  item.row.remove();
-}
+import {
+  bulkManagerIconPath,
+  checkboxClass,
+  clearConversationControls,
+  clearHeaderControls,
+  collectConversationItems,
+  currentConversationId,
+  ensureHeaderControls,
+  extensionResourceUrl,
+  navigateToNewConversation,
+  removeConversationItem,
+  sameHeaderControls,
+  selectedRowClass,
+  syncConversationCheckboxes
+} from "./conversationBulk/dom";
+import {
+  actionConfirmLabel,
+  bulkDialogDescription,
+  bulkDialogTitle,
+  completionToastMessage
+} from "./conversationBulk/labels";
+import type {
+  ArchiveMenuPosition,
+  BulkAction,
+  BulkDialogState,
+  BulkFailure,
+  BulkScope,
+  BulkToast,
+  ConversationItem,
+  HeaderControls
+} from "./conversationBulk/types";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Conversation action failed";
@@ -555,18 +294,9 @@ export function ConversationBulkManager(): ReactElement | null {
   };
 
   const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[], scope: BulkScope) => {
-    const successMessage =
-      action === "delete" && scope === "all" && failed.length === 0
-        ? "Deleted all chats."
-        : `${actionPastLabel(action)} ${pluralizeConversation(succeeded)}.`;
-    const failureMessage =
-      failed.length > 0
-        ? ` ${failed.length} failed${failed[0]?.error ? `: ${failed[0].error}` : "."}`
-        : "";
-
     setToast({
       id: Date.now(),
-      message: `${successMessage}${failureMessage}`,
+      message: completionToastMessage(action, succeeded, failed, scope),
       tone: failed.length > 0 ? "error" : "info"
     });
   };
@@ -849,28 +579,8 @@ export function ConversationBulkManager(): ReactElement | null {
         )
       : null;
 
-  const dialogTitle =
-    bulkDialog?.status === "running"
-      ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
-        ? "Deleting all chats..."
-        : actionProgressTitle(bulkDialog.action)
-      : bulkDialog?.status === "confirm"
-        ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
-          ? "Clear your chat history - are you sure?"
-          : bulkDialog.action === "delete"
-            ? "Delete chats?"
-            : "Archive chats"
-        : "Confirm batch action";
-  const dialogDescription =
-    bulkDialog?.status === "running"
-      ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
-        ? "Do not close this page until the operation finishes."
-        : `${bulkDialog.remaining} of ${bulkDialog.total} remaining. Do not close this page until the operation finishes.`
-      : bulkDialog?.status === "confirm"
-        ? bulkDialog.scope === "all" && bulkDialog.action === "delete"
-          ? "This will delete all chats, including those in Projects and archived conversations."
-          : `This will ${bulkDialog.action} ${pluralizeConversation(bulkDialog.items.length)}.`
-        : "";
+  const dialogTitle = bulkDialogTitle(bulkDialog);
+  const dialogDescription = bulkDialogDescription(bulkDialog);
   const confirmButtonLabel =
     bulkDialog?.status === "confirm" ? actionConfirmLabel(bulkDialog.action) : "Confirm";
   const toastElement = toast

@@ -5,239 +5,23 @@ import {
   TrashIcon
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SavedPrompt } from "../../shared/promptTypes";
 import { AlertModal } from "../components/AlertModal";
 import { loadPrompts, savePrompts } from "../lib/browserStorage";
 import {
-  findPromptComposerForm,
   findPromptInput,
   isPromptInputTarget,
   readPromptInput,
   writePromptInput
 } from "../lib/dom";
-
-const promptTriggerHostAttribute = "data-ecg-prompt-trigger-host";
-const promptPanelHostAttribute = "data-ecg-prompt-panel-host";
-const promptComposerLayerClass = "ecg-prompt-composer-layer";
-
-type PromptComposerAnchors = {
-  panelHost: HTMLElement;
-  triggerHost: HTMLElement;
-};
-
-type PromptEditorMode = { kind: "create" } | { kind: "edit"; promptId: string };
-
-type PromptDraft = {
-  body: string;
-  submitted: boolean;
-  title: string;
-};
-
-type PromptEditorProps = {
-  bodyError: string | null;
-  draft: PromptDraft;
-  mode: PromptEditorMode;
-  onCancel: () => void;
-  onChange: (draft: PromptDraft) => void;
-  onSave: () => void;
-  titleError: string | null;
-  titleInputRef: RefObject<HTMLInputElement | null>;
-};
-
-function createPromptId(): string {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
-  }
-
-  return `prompt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function preview(body: string): string {
-  return body.replace(/\s+/g, " ").trim();
-}
-
-function composeInsertedText(current: string, promptBody: string): string {
-  const withoutSlash = current.replace(/\/\s*$/, "").trimEnd();
-
-  if (!withoutSlash) {
-    return promptBody;
-  }
-
-  return `${withoutSlash}\n\n${promptBody}`;
-}
-
-function sameAnchors(current: PromptComposerAnchors | null, next: PromptComposerAnchors | null): boolean {
-  return current?.triggerHost === next?.triggerHost && current?.panelHost === next?.panelHost;
-}
-
-function emptyDraft(): PromptDraft {
-  return { body: "", submitted: false, title: "" };
-}
-
-function draftHasContent(draft: PromptDraft): boolean {
-  return draft.title.trim().length > 0 || draft.body.trim().length > 0;
-}
-
-function IconButton({
-  children,
-  label,
-  onClick
-}: {
-  children: ReactElement;
-  label: string;
-  onClick: () => void;
-}): ReactElement {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <button
-          aria-label={label}
-          className="ecg-prompt-icon-button"
-          type="button"
-          onClick={onClick}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.stopPropagation();
-            }
-          }}
-        >
-          {children}
-        </button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content className="ecg-prompt-tooltip" side="top" sideOffset={7}>
-          {label}
-          <Tooltip.Arrow className="ecg-prompt-tooltip-arrow" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
-
-function PromptEditor({
-  bodyError,
-  draft,
-  mode,
-  onCancel,
-  onChange,
-  onSave,
-  titleError,
-  titleInputRef
-}: PromptEditorProps): ReactElement {
-  const titleId = `ecg-prompt-${mode.kind}-title`;
-  const bodyId = `ecg-prompt-${mode.kind}-body`;
-
-  return (
-    <div className="ecg-prompt-editor">
-      <div className="ecg-prompt-field">
-        <label htmlFor={titleId}>Title</label>
-        <input
-          aria-invalid={Boolean(titleError)}
-          className="ecg-prompt-input"
-          id={titleId}
-          maxLength={120}
-          placeholder="Name this prompt"
-          ref={titleInputRef}
-          value={draft.title}
-          onChange={(event) => onChange({ ...draft, title: event.target.value })}
-        />
-        {titleError ? <span className="ecg-prompt-error">{titleError}</span> : null}
-      </div>
-      <div className="ecg-prompt-field">
-        <label htmlFor={bodyId}>Prompt</label>
-        <textarea
-          aria-invalid={Boolean(bodyError)}
-          className="ecg-prompt-textarea"
-          id={bodyId}
-          placeholder="Write the reusable prompt..."
-          rows={6}
-          value={draft.body}
-          onChange={(event) => onChange({ ...draft, body: event.target.value })}
-        />
-        {bodyError ? <span className="ecg-prompt-error">{bodyError}</span> : null}
-      </div>
-      <div className="ecg-prompt-editor-actions">
-        <button className="ecg-prompt-secondary" type="button" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="ecg-prompt-primary" type="button" onClick={onSave}>
-          Save
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function usePromptComposerAnchors(): PromptComposerAnchors | null {
-  const [anchors, setAnchors] = useState<PromptComposerAnchors | null>(null);
-
-  useEffect(() => {
-    const createdHosts = new Set<HTMLElement>();
-    const composerLayers = new Set<HTMLElement>();
-    let frame = 0;
-
-    const syncAnchors = () => {
-      const input = findPromptInput();
-      const form = findPromptComposerForm(input);
-
-      if (!form) {
-        setAnchors((current) => (current === null ? current : null));
-        return;
-      }
-
-      form.classList.add("ecg-prompt-composer-anchor");
-      if (form.parentElement) {
-        form.parentElement.classList.add(promptComposerLayerClass);
-        composerLayers.add(form.parentElement);
-      }
-
-      let triggerHost = form.querySelector<HTMLElement>(`[${promptTriggerHostAttribute}]`);
-      if (!triggerHost) {
-        triggerHost = document.createElement("div");
-        triggerHost.setAttribute(promptTriggerHostAttribute, "true");
-        form.append(triggerHost);
-        createdHosts.add(triggerHost);
-      }
-
-      let panelHost = form.querySelector<HTMLElement>(`[${promptPanelHostAttribute}]`);
-      if (!panelHost) {
-        panelHost = document.createElement("div");
-        panelHost.setAttribute(promptPanelHostAttribute, "true");
-        form.append(panelHost);
-        createdHosts.add(panelHost);
-      }
-
-      const nextAnchors = { panelHost, triggerHost };
-      setAnchors((current) => (sameAnchors(current, nextAnchors) ? current : nextAnchors));
-    };
-
-    const scheduleSyncAnchors = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(syncAnchors);
-    };
-
-    syncAnchors();
-
-    const observer = new MutationObserver(scheduleSyncAnchors);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer.disconnect();
-      createdHosts.forEach((host) => {
-        if (host.childElementCount === 0) {
-          host.remove();
-        }
-      });
-      composerLayers.forEach((layer) => layer.classList.remove(promptComposerLayerClass));
-    };
-  }, []);
-
-  return anchors;
-}
+import { PromptEditor } from "./promptManager/PromptEditor";
+import { PromptIconButton } from "./promptManager/PromptIconButton";
+import type { PromptDraft, PromptEditorMode } from "./promptManager/types";
+import { usePromptComposerAnchors } from "./promptManager/usePromptComposerAnchors";
+import { composeInsertedText, createPromptId, draftHasContent, emptyDraft, preview } from "./promptManager/utils";
 
 export function PromptManager(): ReactElement | null {
   const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
@@ -640,12 +424,12 @@ export function PromptManager(): ReactElement | null {
                         </span>
                       </button>
                       <span className="ecg-prompt-actions">
-                        <IconButton label={`Edit prompt: ${prompt.title}`} onClick={() => openEditEditor(prompt)}>
+                        <PromptIconButton label={`Edit prompt: ${prompt.title}`} onClick={() => openEditEditor(prompt)}>
                           <Pencil1Icon />
-                        </IconButton>
-                        <IconButton label={`Delete prompt: ${prompt.title}`} onClick={() => setDeletePromptId(prompt.id)}>
+                        </PromptIconButton>
+                        <PromptIconButton label={`Delete prompt: ${prompt.title}`} onClick={() => setDeletePromptId(prompt.id)}>
                           <TrashIcon />
-                        </IconButton>
+                        </PromptIconButton>
                       </span>
                     </div>
                   </div>
@@ -668,9 +452,9 @@ export function PromptManager(): ReactElement | null {
             ) : null}
             {!editorMode ? (
               <div className="ecg-prompt-footer">
-                <IconButton label="Create prompt" onClick={openCreateEditor}>
+                <PromptIconButton label="Create prompt" onClick={openCreateEditor}>
                   <PlusIcon />
-                </IconButton>
+                </PromptIconButton>
               </div>
             ) : null}
             <AlertModal
