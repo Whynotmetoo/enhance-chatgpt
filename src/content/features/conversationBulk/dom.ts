@@ -26,27 +26,36 @@ export function extensionResourceUrl(path: string): string {
 }
 
 function findSidebar(): HTMLElement | null {
+  const history = document.querySelector<HTMLElement>("#history");
+  const historySidebar = history?.closest<HTMLElement>("[data-testid='sidebar'], #stage-slideover-sidebar, aside, nav");
+  if (historySidebar) {
+    return historySidebar;
+  }
+
   return (
     document.querySelector<HTMLElement>("[data-testid='sidebar']") ??
-    document.querySelector<HTMLElement>("nav[aria-label*='Chat']") ??
     document.querySelector<HTMLElement>("aside") ??
     document.querySelector<HTMLElement>("nav")
   );
 }
 
-function isRecentsButton(button: HTMLButtonElement): boolean {
-  const label =
-    button.querySelector("h2.__menu-label")?.textContent?.trim() ??
-    button.textContent?.trim() ??
-    "";
-  return /^recents?$/i.test(label);
+function findHistoryContainer(sidebar: HTMLElement): HTMLElement | null {
+  return sidebar.querySelector<HTMLElement>("#history");
 }
 
-function findRecentsButton(sidebar: HTMLElement): HTMLButtonElement | null {
-  return (
-    Array.from(sidebar.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")).find(isRecentsButton) ??
-    null
-  );
+function findHistoryHeader(history: HTMLElement): HTMLElement | null {
+  const previousSibling = history.previousElementSibling;
+  if (previousSibling instanceof HTMLElement) {
+    return previousSibling;
+  }
+
+  const section = history.closest<HTMLElement>("[class*='sidebar-expando-section']");
+  const header = section?.querySelector<HTMLElement>("button[aria-expanded]")?.parentElement ?? null;
+  return header instanceof HTMLElement ? header : null;
+}
+
+function findRecentsContainer(sidebar: HTMLElement): HTMLElement | null {
+  return findHistoryContainer(sidebar);
 }
 
 export function sameHeaderControls(current: HeaderControls | null, next: HeaderControls | null): boolean {
@@ -63,8 +72,9 @@ export function ensureHeaderControls(): HeaderControls | null {
     return null;
   }
 
-  const recentsButton = findRecentsButton(sidebar);
-  const header = recentsButton?.parentElement ?? null;
+  const history = findHistoryContainer(sidebar);
+  const header = history ? findHistoryHeader(history) : null;
+  const recentsButton = header?.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? null;
   if (!recentsButton || !header) {
     return null;
   }
@@ -104,9 +114,14 @@ export function collectConversationItems(): ConversationItem[] {
     return [];
   }
 
+  const recentsContainer = findRecentsContainer(sidebar);
+  if (!recentsContainer) {
+    return [];
+  }
+
   const seen = new Set<string>();
 
-  return Array.from(sidebar.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']"))
+  return Array.from(recentsContainer.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']"))
     .map((anchor) => {
       const id = conversationIdFromHref(anchor.href);
       if (!id || seen.has(id) || !isVisible(anchor)) {
