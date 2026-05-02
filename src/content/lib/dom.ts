@@ -89,11 +89,21 @@ export function conversationIdFromHref(href: string): string | null {
   }
 }
 
-export function debounce(callback: () => void, wait = 120): () => void {
+export type DebouncedCallback = (() => void) & {
+  cancel: () => void;
+};
+
+export function debounce(callback: () => void, wait = 120): DebouncedCallback {
   let timer = 0;
 
-  return () => {
+  const debounced = () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(callback, wait);
   };
+
+  debounced.cancel = () => {
+    window.clearTimeout(timer);
+  };
+
+  return debounced;
 }

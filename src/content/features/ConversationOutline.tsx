@@ -212,7 +212,10 @@ export function ConversationOutline(): ReactElement | null {
       update();
       observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
-      return () => observer.disconnect();
+      return () => {
+        scheduleUpdate.cancel();
+        observer.disconnect();
+      };
     }
 
     const update = () => {
@@ -254,6 +257,8 @@ export function ConversationOutline(): ReactElement | null {
     observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
     return () => {
+      scheduleUpdate.cancel();
+      scheduleRefresh.cancel();
       controller.abort();
       observer.disconnect();
     };
