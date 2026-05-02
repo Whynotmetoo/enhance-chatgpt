@@ -212,7 +212,10 @@ export function ConversationOutline(): ReactElement | null {
       update();
       observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
-      return () => observer.disconnect();
+      return () => {
+        scheduleUpdate.cancel();
+        observer.disconnect();
+      };
     }
 
     const update = () => {
@@ -223,38 +226,13 @@ export function ConversationOutline(): ReactElement | null {
       );
     };
     const scheduleUpdate = debounce(update, 150);
-    const controller = new AbortController();
-    let refreshing = false;
-    const refresh = () => {
-      if (!conversationId || refreshing) {
-        return;
-      }
-
-      refreshing = true;
-      fetchConversationOutlineWithRetry(conversationId, controller.signal, Date.now() - 250)
-        .then((outlineItems) => {
-          if (!controller.signal.aborted && outlineItems.length > 0) {
-            setSource({ conversationId, mode: "api", items: outlineItems });
-          }
-        })
-        .catch(() => {
-          // Keep the current API outline; transient refresh failures should not downgrade to partial DOM data.
-        })
-        .finally(() => {
-          refreshing = false;
-        });
-    };
-    const scheduleRefresh = debounce(refresh, 900);
-    const observer = new MutationObserver(() => {
-      scheduleUpdate();
-      scheduleRefresh();
-    });
+    const observer = new MutationObserver(scheduleUpdate);
 
     update();
     observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
 
     return () => {
-      controller.abort();
+      scheduleUpdate.cancel();
       observer.disconnect();
     };
   }, [conversationId, conversationLocation.changedAt, domFallbackReady, hasConversationStateActivity, source]);
