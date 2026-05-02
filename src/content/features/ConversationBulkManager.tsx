@@ -5,20 +5,27 @@ import { ARCHIVED_CHATS_SETTINGS_HASH, SUPPORT_EXTENSION_URL } from "../../share
 import { AlertModal } from "../components/AlertModal";
 import { ChatGptArchiveIcon, ChatGptDataControlsIcon, ChatGptMoreIcon, ChatGptTrashIcon, HeartIcon } from "../lib/icons";
 import { debounce } from "../lib/dom";
-import { clearAllConversationsInPageContext, performConversationActionInPageContext } from "../lib/chatGptApiBridge";
+import {
+  clearAllConversationsInPageContext,
+  performConversationActionInPageContext,
+  subscribeConversationListActivity
+} from "../lib/chatGptApiBridge";
 import {
   bulkManagerIconPath,
   checkboxClass,
   clearConversationControls,
   clearHeaderControls,
   collectConversationItems,
+  conversationPageCenterX,
   currentConversationId,
   ensureHeaderControls,
   extensionResourceUrl,
   navigateToNewConversation,
-  removeConversationItem,
+  restoreSuppressedConversationRows,
   sameHeaderControls,
   selectedRowClass,
+  suppressConversationItem,
+  syncSuppressedConversationRows,
   syncConversationCheckboxes
 } from "./conversationBulk/dom";
 import {
@@ -51,9 +58,12 @@ export function ConversationBulkManager(): ReactElement | null {
   const [bulkDialog, setBulkDialog] = useState<BulkDialogState | null>(null);
   const [toast, setToast] = useState<BulkToast | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [suppressedConversations, setSuppressedConversations] = useState<Map<string, number>>(() => new Map());
   const archiveMenuRootRef = useRef<HTMLDivElement>(null);
   const archiveMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
+  const authoritativeVisibleIdsRef = useRef<Set<string> | null>(null);
+  const suppressedConversationsRef = useRef<Map<string, number>>(new Map());
   const bulkAbortControllerRef = useRef<AbortController | null>(null);
   const bulkCancelRef = useRef<HTMLButtonElement>(null);
 
@@ -65,6 +75,16 @@ export function ConversationBulkManager(): ReactElement | null {
   const allVisibleSelected = items.length > 0 && selectedIds.size === items.length;
   const partiallySelected = selectedIds.size > 0 && !allVisibleSelected;
   const isBulkRunning = bulkDialog?.status === "running";
+  const suppressedIds = useMemo(() => new Set(suppressedConversations.keys()), [suppressedConversations]);
+
+  const activeSuppressedIds = () => {
+    const authoritativeVisibleIds = authoritativeVisibleIdsRef.current;
+    if (!authoritativeVisibleIds) {
+      return suppressedIds;
+    }
+
+    return new Set(Array.from(suppressedIds).filter((id) => !authoritativeVisibleIds.has(id)));
+  };
 
   useEffect(() => {
     const update = () => {
@@ -86,6 +106,7 @@ export function ConversationBulkManager(): ReactElement | null {
 
   useEffect(() => {
     const update = () => {
+      syncSuppressedConversationRows(activeSuppressedIds());
       const nextItems = collectConversationItems();
       if (isSelectionModeActive) {
         syncConversationCheckboxes(nextItems);
@@ -105,7 +126,53 @@ export function ConversationBulkManager(): ReactElement | null {
       observer.disconnect();
       clearConversationControls();
     };
-  }, [isSelectionModeActive]);
+  }, [isSelectionModeActive, suppressedIds]);
+
+  useEffect(() => {
+    return subscribeConversationListActivity((activity) => {
+      if (
+        activity.context.isArchived === "true" ||
+        activity.context.isStarred === "true" ||
+        (activity.context.offset !== null && activity.context.offset !== "0")
+      ) {
+        return;
+      }
+
+      const visibleIds = new Set(activity.conversationIds);
+      const restorableVisibleIds = new Set(visibleIds);
+      suppressedConversationsRef.current.forEach((suppressedAt, id) => {
+        if (visibleIds.has(id) && activity.requestedAt < suppressedAt) {
+          restorableVisibleIds.delete(id);
+        }
+      });
+
+      authoritativeVisibleIdsRef.current = restorableVisibleIds;
+      restoreSuppressedConversationRows(restorableVisibleIds);
+
+      setSuppressedConversations((current) => {
+        let next: Map<string, number> | null = null;
+
+        current.forEach((suppressedAt, id) => {
+          if (!visibleIds.has(id) || activity.requestedAt < suppressedAt) {
+            return;
+          }
+
+          next ??= new Map(current);
+          next.delete(id);
+        });
+
+        const result = next ?? current;
+        suppressedConversationsRef.current = result;
+        return result;
+      });
+
+      setItems((current) => current.filter((item) => restorableVisibleIds.has(item.id)));
+      setSelectedIds((current) => {
+        const next = new Set(Array.from(current).filter((id) => restorableVisibleIds.has(id)));
+        return next.size === current.size ? current : next;
+      });
+    });
+  }, []);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -296,21 +363,33 @@ export function ConversationBulkManager(): ReactElement | null {
   const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[], scope: BulkScope) => {
     setToast({
       id: Date.now(),
+      left: conversationPageCenterX(),
       message: completionToastMessage(action, succeeded, failed, scope),
       tone: failed.length > 0 ? "error" : "info"
     });
   };
 
-  const removeSucceededConversation = (item: ConversationItem) => {
-    removeConversationItem(item);
-    setItems((current) => current.filter((conversation) => conversation.id !== item.id));
+  const suppressSucceededConversations = (actionItems: ConversationItem[]) => {
+    const succeededIds = new Set(actionItems.map((item) => item.id));
+    const suppressedAt = Date.now();
+
+    actionItems.forEach((item) => authoritativeVisibleIdsRef.current?.delete(item.id));
+    actionItems.forEach(suppressConversationItem);
+
+    setSuppressedConversations((current) => {
+      const next = new Map(current);
+      actionItems.forEach((item) => next.set(item.id, suppressedAt));
+      suppressedConversationsRef.current = next;
+      return next;
+    });
+    setItems((current) => current.filter((conversation) => !succeededIds.has(conversation.id)));
     setSelectedIds((current) => {
-      if (!current.has(item.id)) {
+      if (!Array.from(succeededIds).some((id) => current.has(id))) {
         return current;
       }
 
       const next = new Set(current);
-      next.delete(item.id);
+      succeededIds.forEach((id) => next.delete(id));
       return next;
     });
   };
@@ -335,9 +414,7 @@ export function ConversationBulkManager(): ReactElement | null {
     try {
       const result = await clearAllConversationsInPageContext(controller.signal);
       if (result.ok) {
-        actionItems.forEach(removeConversationItem);
-        setItems([]);
-        setSelectedIds(new Set());
+        suppressSucceededConversations(actionItems);
       } else {
         failed.push({
           error: result.error ?? `Request failed${result.status ? ` with status ${result.status}` : ""}`,
@@ -393,7 +470,7 @@ export function ConversationBulkManager(): ReactElement | null {
         const result = await performConversationActionInPageContext(item.id, action, controller.signal);
         if (result.ok) {
           succeededItems.push(item);
-          removeSucceededConversation(item);
+          suppressSucceededConversations([item]);
         } else {
           failed.push({
             error: result.error ?? `Request failed${result.status ? ` with status ${result.status}` : ""}`,
@@ -590,6 +667,7 @@ export function ConversationBulkManager(): ReactElement | null {
           data-tone={toast.tone}
           key={toast.id}
           role="status"
+          style={{ left: toast.left }}
         >
           {toast.message}
         </div>,

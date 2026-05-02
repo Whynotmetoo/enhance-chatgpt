@@ -14,6 +14,7 @@
   const clearAllConversationsResponseSource = "enhance-chatgpt:clear-all-conversations-response";
   const locationChangeSource = "enhance-chatgpt:location-changed";
   const conversationActivitySource = "enhance-chatgpt:conversation-activity";
+  const conversationListActivitySource = "enhance-chatgpt:conversation-list-activity";
   const conversationCache = new Map();
   const backendApiHeaders = new Map();
   const pendingConversations = new Map();
@@ -84,6 +85,18 @@
         conversationId: conversationIdFromUrl(window.location.href),
         changedAt: Date.now(),
         ...detail
+      },
+      window.location.origin
+    );
+  }
+
+  function postConversationListActivity(conversationIds, requestedAt, context) {
+    window.postMessage(
+      {
+        source: conversationListActivitySource,
+        conversationIds,
+        context,
+        requestedAt
       },
       window.location.origin
     );
@@ -178,6 +191,80 @@
     }
   }
 
+  function isConversationListInput(input, init) {
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    if (String(method).toUpperCase() !== "GET") {
+      return false;
+    }
+
+    try {
+      const parsedUrl = new URL(urlFromInput(input), window.location.origin);
+      return parsedUrl.origin === window.location.origin && parsedUrl.pathname === "/backend-api/conversations";
+    } catch {
+      return false;
+    }
+  }
+
+  function conversationListContext(input) {
+    try {
+      const parsedUrl = new URL(urlFromInput(input), window.location.origin);
+      return {
+        isArchived: parsedUrl.searchParams.get("is_archived"),
+        isStarred: parsedUrl.searchParams.get("is_starred"),
+        offset: parsedUrl.searchParams.get("offset")
+      };
+    } catch {
+      return {
+        isArchived: null,
+        isStarred: null,
+        offset: null
+      };
+    }
+  }
+
+  function isConversationListItem(value) {
+    return (
+      value &&
+      typeof value === "object" &&
+      typeof value.id === "string" &&
+      (
+        "title" in value ||
+        "create_time" in value ||
+        "update_time" in value ||
+        "conversation_template_id" in value
+      )
+    );
+  }
+
+  function conversationIdsFromListBody(body) {
+    const ids = new Set();
+
+    const visit = (value, depth = 0) => {
+      if (!value || typeof value !== "object" || depth > 5) {
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (isConversationListItem(item)) {
+            ids.add(item.id);
+          }
+          visit(item, depth + 1);
+        });
+        return;
+      }
+
+      ["items", "conversations", "data", "results"].forEach((key) => {
+        if (key in value) {
+          visit(value[key], depth + 1);
+        }
+      });
+    };
+
+    visit(body);
+    return Array.from(ids);
+  }
+
   function rememberConversation(conversationId, body) {
     conversationCache.set(conversationId, {
       body,
@@ -269,11 +356,30 @@
       .catch(() => postConversationActivity("error"));
   }
 
+  function observeConversationListResponse(responsePromise, requestedAt, context) {
+    void responsePromise
+      .then((response) => {
+        if (!response.ok) {
+          return;
+        }
+
+        return response
+          .clone()
+          .json()
+          .then((body) => postConversationListActivity(conversationIdsFromListBody(body), requestedAt, context))
+          .catch(() => undefined);
+      })
+      .catch(() => undefined);
+  }
+
   function wrapFetch(fetchImplementation) {
     return function enhanceChatGPTFetch(input, init) {
       const conversationId = conversationIdFromInput(input, init);
       const isConversationStateRequest = isConversationStateInput(input);
+      const isConversationListRequest = isConversationListInput(input, init);
       const isBackendApiRequest = isBackendApiInput(input);
+      const listContext = isConversationListRequest ? conversationListContext(input) : null;
+      const requestedAt = Date.now();
       rememberBackendApiRequestHeaders(input, init);
       if (isConversationStateRequest) {
         postConversationActivity("request");
@@ -289,6 +395,9 @@
       }
       if (isConversationStateRequest) {
         observeConversationStateResponse(responsePromise);
+      }
+      if (isConversationListRequest) {
+        observeConversationListResponse(responsePromise, requestedAt, listContext);
       }
 
       return responsePromise;

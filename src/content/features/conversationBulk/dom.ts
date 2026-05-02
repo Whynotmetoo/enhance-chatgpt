@@ -3,6 +3,7 @@ import type { ConversationItem, HeaderControls } from "./types";
 
 export const checkboxClass = "ecg-conversation-checkbox";
 export const selectedRowClass = "ecg-conversation-row-selected";
+export const suppressedRowClass = "ecg-conversation-row-suppressed";
 export const bulkManagerIconPath = "icons/icon-transparent.svg";
 
 const headerActionsHostAttribute = "data-ecg-bulk-actions-host";
@@ -10,6 +11,7 @@ const headerClass = "ecg-recents-header-row";
 const headerSelectHostAttribute = "data-ecg-bulk-select-host";
 const recentsButtonClass = "ecg-recents-trigger";
 const rowClass = "ecg-conversation-row";
+const chatGptSidebarWidth = 260;
 
 type ExtensionGlobal = typeof globalThis & {
   browser?: { runtime?: { getURL?: (path: string) => string } };
@@ -26,27 +28,36 @@ export function extensionResourceUrl(path: string): string {
 }
 
 function findSidebar(): HTMLElement | null {
+  const history = document.querySelector<HTMLElement>("#history");
+  const historySidebar = history?.closest<HTMLElement>("[data-testid='sidebar'], #stage-slideover-sidebar, aside, nav");
+  if (historySidebar) {
+    return historySidebar;
+  }
+
   return (
     document.querySelector<HTMLElement>("[data-testid='sidebar']") ??
-    document.querySelector<HTMLElement>("nav[aria-label*='Chat']") ??
     document.querySelector<HTMLElement>("aside") ??
     document.querySelector<HTMLElement>("nav")
   );
 }
 
-function isRecentsButton(button: HTMLButtonElement): boolean {
-  const label =
-    button.querySelector("h2.__menu-label")?.textContent?.trim() ??
-    button.textContent?.trim() ??
-    "";
-  return /^recents?$/i.test(label);
+function findHistoryContainer(sidebar: HTMLElement): HTMLElement | null {
+  return sidebar.querySelector<HTMLElement>("#history");
 }
 
-function findRecentsButton(sidebar: HTMLElement): HTMLButtonElement | null {
-  return (
-    Array.from(sidebar.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")).find(isRecentsButton) ??
-    null
-  );
+function findHistoryHeader(history: HTMLElement): HTMLElement | null {
+  const previousSibling = history.previousElementSibling;
+  if (previousSibling instanceof HTMLElement) {
+    return previousSibling;
+  }
+
+  const section = history.closest<HTMLElement>("[class*='sidebar-expando-section']");
+  const header = section?.querySelector<HTMLElement>("button[aria-expanded]")?.parentElement ?? null;
+  return header instanceof HTMLElement ? header : null;
+}
+
+function findRecentsContainer(sidebar: HTMLElement): HTMLElement | null {
+  return findHistoryContainer(sidebar);
 }
 
 export function sameHeaderControls(current: HeaderControls | null, next: HeaderControls | null): boolean {
@@ -63,8 +74,9 @@ export function ensureHeaderControls(): HeaderControls | null {
     return null;
   }
 
-  const recentsButton = findRecentsButton(sidebar);
-  const header = recentsButton?.parentElement ?? null;
+  const history = findHistoryContainer(sidebar);
+  const header = history ? findHistoryHeader(history) : null;
+  const recentsButton = header?.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? null;
   if (!recentsButton || !header) {
     return null;
   }
@@ -98,15 +110,25 @@ function rowForAnchor(anchor: HTMLAnchorElement): HTMLElement {
   );
 }
 
+function conversationIdForRow(row: HTMLElement): string | null {
+  const anchor = row.querySelector<HTMLAnchorElement>("a[href*='/c/']");
+  return anchor ? conversationIdFromHref(anchor.href) : null;
+}
+
 export function collectConversationItems(): ConversationItem[] {
   const sidebar = findSidebar();
   if (!sidebar) {
     return [];
   }
 
+  const recentsContainer = findRecentsContainer(sidebar);
+  if (!recentsContainer) {
+    return [];
+  }
+
   const seen = new Set<string>();
 
-  return Array.from(sidebar.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']"))
+  return Array.from(recentsContainer.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']"))
     .map((anchor) => {
       const id = conversationIdFromHref(anchor.href);
       if (!id || seen.has(id) || !isVisible(anchor)) {
@@ -185,6 +207,19 @@ export function currentConversationId(): string | null {
   return conversationIdFromHref(window.location.href);
 }
 
+export function conversationPageCenterX(): number {
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const sidebar = findSidebar();
+  const hasVisibleSidebar = sidebar ? isVisible(sidebar) : false;
+  const contentLeft = hasVisibleSidebar ? chatGptSidebarWidth : 0;
+
+  if (contentLeft < viewportWidth - 120) {
+    return contentLeft + (viewportWidth - contentLeft) / 2;
+  }
+
+  return viewportWidth / 2;
+}
+
 function findNewConversationElement(): HTMLElement | null {
   const selectors = [
     "a[aria-label*='New chat' i]",
@@ -215,6 +250,42 @@ export function navigateToNewConversation(): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export function removeConversationItem(item: ConversationItem): void {
-  item.row.remove();
+export function suppressConversationItem(item: ConversationItem): void {
+  item.row.classList.add(suppressedRowClass);
+  item.row.classList.remove(selectedRowClass);
+  item.row.querySelector<HTMLButtonElement>(`.${checkboxClass}`)?.remove();
+}
+
+export function syncSuppressedConversationRows(suppressedIds: ReadonlySet<string>): void {
+  if (suppressedIds.size === 0) {
+    return;
+  }
+
+  const sidebar = findSidebar();
+  const recentsContainer = sidebar ? findRecentsContainer(sidebar) : null;
+  if (!recentsContainer) {
+    return;
+  }
+
+  recentsContainer.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']").forEach((anchor) => {
+    const id = conversationIdFromHref(anchor.href);
+    if (!id || !suppressedIds.has(id)) {
+      return;
+    }
+
+    rowForAnchor(anchor).classList.add(suppressedRowClass);
+  });
+}
+
+export function restoreSuppressedConversationRows(restoredIds: ReadonlySet<string>): void {
+  if (restoredIds.size === 0) {
+    return;
+  }
+
+  document.querySelectorAll<HTMLElement>(`.${suppressedRowClass}`).forEach((row) => {
+    const id = conversationIdForRow(row);
+    if (id && restoredIds.has(id)) {
+      row.classList.remove(suppressedRowClass);
+    }
+  });
 }
