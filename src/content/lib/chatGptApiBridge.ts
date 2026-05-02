@@ -6,12 +6,23 @@ const conversationActionResponseSource = "enhance-chatgpt:conversation-action-re
 const clearAllConversationsRequestSource = "enhance-chatgpt:clear-all-conversations";
 const clearAllConversationsResponseSource = "enhance-chatgpt:clear-all-conversations-response";
 const conversationActivitySource = "enhance-chatgpt:conversation-activity";
+const conversationListActivitySource = "enhance-chatgpt:conversation-list-activity";
 
 export type ConversationActivity = {
   conversationId: string | null;
   href: string | null;
   changedAt: number;
   phase: "request" | "response" | "error";
+};
+
+export type ConversationListActivity = {
+  context: {
+    isArchived: string | null;
+    isStarred: string | null;
+    offset: string | null;
+  };
+  conversationIds: string[];
+  requestedAt: number;
 };
 
 type RuntimeApi = {
@@ -69,6 +80,7 @@ let installed = false;
 let activityListenerInstalled = false;
 let requestCounter = 0;
 const activityListeners = new Set<(activity: ConversationActivity) => void>();
+const conversationListActivityListeners = new Set<(activity: ConversationListActivity) => void>();
 const recentConversationActivities: ConversationActivity[] = [];
 
 function extensionApi(): ExtensionApi | undefined {
@@ -93,6 +105,10 @@ function rememberConversationActivity(activity: ConversationActivity): void {
   activityListeners.forEach((listener) => listener(activity));
 }
 
+function rememberConversationListActivity(activity: ConversationListActivity): void {
+  conversationListActivityListeners.forEach((listener) => listener(activity));
+}
+
 function installConversationActivityListener(): void {
   if (activityListenerInstalled) {
     return;
@@ -105,6 +121,29 @@ function installConversationActivityListener(): void {
     }
 
     const data = event.data;
+    if (data.source === conversationListActivitySource) {
+      const conversationIds = Array.isArray(data.conversationIds)
+        ? data.conversationIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+        : [];
+
+      rememberConversationListActivity({
+        context: isRecord(data.context)
+          ? {
+              isArchived: typeof data.context.isArchived === "string" ? data.context.isArchived : null,
+              isStarred: typeof data.context.isStarred === "string" ? data.context.isStarred : null,
+              offset: typeof data.context.offset === "string" ? data.context.offset : null
+            }
+          : {
+              isArchived: null,
+              isStarred: null,
+              offset: null
+            },
+        conversationIds,
+        requestedAt: typeof data.requestedAt === "number" ? data.requestedAt : Date.now()
+      });
+      return;
+    }
+
     if (data.source !== conversationActivitySource) {
       return;
     }
@@ -164,6 +203,15 @@ export function subscribeConversationActivity(listener: (activity: ConversationA
 
   return () => {
     activityListeners.delete(listener);
+  };
+}
+
+export function subscribeConversationListActivity(listener: (activity: ConversationListActivity) => void): () => void {
+  installChatGptApiBridge();
+  conversationListActivityListeners.add(listener);
+
+  return () => {
+    conversationListActivityListeners.delete(listener);
   };
 }
 

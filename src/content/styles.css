@@ -22,6 +22,10 @@
   position: relative !important;
 }
 
+.ecg-conversation-row-suppressed {
+  display: none !important;
+}
+
 .ecg-recents-header-row {
   align-items: center !important;
   box-sizing: border-box;

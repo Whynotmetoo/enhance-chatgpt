@@ -3,6 +3,7 @@ import type { ConversationItem, HeaderControls } from "./types";
 
 export const checkboxClass = "ecg-conversation-checkbox";
 export const selectedRowClass = "ecg-conversation-row-selected";
+export const suppressedRowClass = "ecg-conversation-row-suppressed";
 export const bulkManagerIconPath = "icons/icon-transparent.svg";
 
 const headerActionsHostAttribute = "data-ecg-bulk-actions-host";
@@ -106,6 +107,11 @@ function rowForAnchor(anchor: HTMLAnchorElement): HTMLElement {
     anchor.parentElement ??
     anchor
   );
+}
+
+function conversationIdForRow(row: HTMLElement): string | null {
+  const anchor = row.querySelector<HTMLAnchorElement>("a[href*='/c/']");
+  return anchor ? conversationIdFromHref(anchor.href) : null;
 }
 
 export function collectConversationItems(): ConversationItem[] {
@@ -230,6 +236,42 @@ export function navigateToNewConversation(): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export function removeConversationItem(item: ConversationItem): void {
-  item.row.remove();
+export function suppressConversationItem(item: ConversationItem): void {
+  item.row.classList.add(suppressedRowClass);
+  item.row.classList.remove(selectedRowClass);
+  item.row.querySelector<HTMLButtonElement>(`.${checkboxClass}`)?.remove();
+}
+
+export function syncSuppressedConversationRows(suppressedIds: ReadonlySet<string>): void {
+  if (suppressedIds.size === 0) {
+    return;
+  }
+
+  const sidebar = findSidebar();
+  const recentsContainer = sidebar ? findRecentsContainer(sidebar) : null;
+  if (!recentsContainer) {
+    return;
+  }
+
+  recentsContainer.querySelectorAll<HTMLAnchorElement>("a[href*='/c/']").forEach((anchor) => {
+    const id = conversationIdFromHref(anchor.href);
+    if (!id || !suppressedIds.has(id)) {
+      return;
+    }
+
+    rowForAnchor(anchor).classList.add(suppressedRowClass);
+  });
+}
+
+export function restoreSuppressedConversationRows(restoredIds: ReadonlySet<string>): void {
+  if (restoredIds.size === 0) {
+    return;
+  }
+
+  document.querySelectorAll<HTMLElement>(`.${suppressedRowClass}`).forEach((row) => {
+    const id = conversationIdForRow(row);
+    if (id && restoredIds.has(id)) {
+      row.classList.remove(suppressedRowClass);
+    }
+  });
 }
