@@ -63,6 +63,7 @@ export function ConversationBulkManager(): ReactElement | null {
   const archiveMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
   const authoritativeVisibleIdsRef = useRef<Set<string> | null>(null);
+  const suppressedConversationsRef = useRef<Map<string, number>>(new Map());
   const bulkAbortControllerRef = useRef<AbortController | null>(null);
   const bulkCancelRef = useRef<HTMLButtonElement>(null);
 
@@ -138,8 +139,15 @@ export function ConversationBulkManager(): ReactElement | null {
       }
 
       const visibleIds = new Set(activity.conversationIds);
-      authoritativeVisibleIdsRef.current = visibleIds;
-      restoreSuppressedConversationRows(visibleIds);
+      const restorableVisibleIds = new Set(visibleIds);
+      suppressedConversationsRef.current.forEach((suppressedAt, id) => {
+        if (visibleIds.has(id) && activity.requestedAt < suppressedAt) {
+          restorableVisibleIds.delete(id);
+        }
+      });
+
+      authoritativeVisibleIdsRef.current = restorableVisibleIds;
+      restoreSuppressedConversationRows(restorableVisibleIds);
 
       setSuppressedConversations((current) => {
         let next: Map<string, number> | null = null;
@@ -153,12 +161,14 @@ export function ConversationBulkManager(): ReactElement | null {
           next.delete(id);
         });
 
-        return next ?? current;
+        const result = next ?? current;
+        suppressedConversationsRef.current = result;
+        return result;
       });
 
-      setItems((current) => current.filter((item) => visibleIds.has(item.id)));
+      setItems((current) => current.filter((item) => restorableVisibleIds.has(item.id)));
       setSelectedIds((current) => {
-        const next = new Set(Array.from(current).filter((id) => visibleIds.has(id)));
+        const next = new Set(Array.from(current).filter((id) => restorableVisibleIds.has(id)));
         return next.size === current.size ? current : next;
       });
     });
@@ -369,6 +379,7 @@ export function ConversationBulkManager(): ReactElement | null {
     setSuppressedConversations((current) => {
       const next = new Map(current);
       actionItems.forEach((item) => next.set(item.id, suppressedAt));
+      suppressedConversationsRef.current = next;
       return next;
     });
     setItems((current) => current.filter((conversation) => !succeededIds.has(conversation.id)));
