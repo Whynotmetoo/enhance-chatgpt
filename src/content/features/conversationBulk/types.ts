@@ -34,6 +34,7 @@ export type BulkDialogState =
 
 export type BulkToast = {
   id: number;
+  left: number;
   message: string;
   tone: "info" | "error";
 };

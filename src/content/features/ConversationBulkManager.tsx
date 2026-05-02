@@ -16,6 +16,7 @@ import {
   clearConversationControls,
   clearHeaderControls,
   collectConversationItems,
+  conversationPageCenterX,
   currentConversationId,
   ensureHeaderControls,
   extensionResourceUrl,
@@ -352,6 +353,7 @@ export function ConversationBulkManager(): ReactElement | null {
   const showCompletionToast = (action: BulkAction, succeeded: number, failed: BulkFailure[], scope: BulkScope) => {
     setToast({
       id: Date.now(),
+      left: conversationPageCenterX(),
       message: completionToastMessage(action, succeeded, failed, scope),
       tone: failed.length > 0 ? "error" : "info"
     });
@@ -654,6 +656,7 @@ export function ConversationBulkManager(): ReactElement | null {
           data-tone={toast.tone}
           key={toast.id}
           role="status"
+          style={{ left: toast.left }}
         >
           {toast.message}
         </div>,

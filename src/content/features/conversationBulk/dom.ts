@@ -11,6 +11,7 @@ const headerClass = "ecg-recents-header-row";
 const headerSelectHostAttribute = "data-ecg-bulk-select-host";
 const recentsButtonClass = "ecg-recents-trigger";
 const rowClass = "ecg-conversation-row";
+const chatGptSidebarWidth = 260;
 
 type ExtensionGlobal = typeof globalThis & {
   browser?: { runtime?: { getURL?: (path: string) => string } };
@@ -204,6 +205,19 @@ export function clearHeaderControls(): void {
 
 export function currentConversationId(): string | null {
   return conversationIdFromHref(window.location.href);
+}
+
+export function conversationPageCenterX(): number {
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const sidebar = findSidebar();
+  const hasVisibleSidebar = sidebar ? isVisible(sidebar) : false;
+  const contentLeft = hasVisibleSidebar ? chatGptSidebarWidth : 0;
+
+  if (contentLeft < viewportWidth - 120) {
+    return contentLeft + (viewportWidth - contentLeft) / 2;
+  }
+
+  return viewportWidth / 2;
 }
 
 function findNewConversationElement(): HTMLElement | null {
