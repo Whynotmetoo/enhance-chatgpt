@@ -1,5 +1,6 @@
 export type OutlineKind = "user" | "assistant" | "heading";
 export type OutlineMode = "api" | "dom";
+export type OutlineNodeRole = "user" | "assistant" | "system" | "tool" | null;
 
 export type OutlineItem = {
   id: string;
@@ -14,7 +15,30 @@ export type OutlineItem = {
 export type OutlineSource = {
   conversationId: string | null;
   mode: OutlineMode;
-  items: OutlineItem[];
+  tree: OutlineTree | null;
+};
+
+export type OutlineTreeNode = {
+  children: string[];
+  element: HTMLElement | null;
+  id: string;
+  outlineItems: OutlineItem[];
+  parentId: string | null;
+  role: OutlineNodeRole;
+};
+
+export type OutlineTree = {
+  activeNodeId: string | null;
+  conversationId: string;
+  nodes: Map<string, OutlineTreeNode>;
+  rootIds: string[];
+};
+
+export type DomOutlineTurn = {
+  element: HTMLElement;
+  id: string;
+  outlineItems: OutlineItem[];
+  role: Extract<OutlineNodeRole, "user" | "assistant">;
 };
 
 export type PendingScroll = {

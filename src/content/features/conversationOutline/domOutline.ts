@@ -6,7 +6,7 @@ import {
   outlineIdAttribute,
   turnSelector
 } from "./constants";
-import type { OutlineItem } from "./types";
+import type { DomOutlineTurn, OutlineItem } from "./types";
 import { compareDocumentOrder, cssEscape, headingLevel, normalizeLabel } from "./utils";
 
 export function collectTurnElements(): HTMLElement[] {
@@ -127,36 +127,57 @@ function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineIt
     }));
 }
 
-export function collectDomOutlineItems(): OutlineItem[] {
-  const items: OutlineItem[] = [];
+export function collectDomOutlineTurns(): DomOutlineTurn[] {
+  const turns: DomOutlineTurn[] = [];
   let userIndex = 0;
   let answerIndex = 0;
 
   collectTurnElements().forEach((turn) => {
     const role = turnRole(turn);
+    const id = messageIdFromTurn(turn);
+
+    if (!id || !role || !isVisible(turn)) {
+      return;
+    }
 
     if (role === "user") {
       userIndex += 1;
       answerIndex = 0;
-      items.push({
-        id: stableOutlineId(turn, "user", userIndex),
-        label: userLabel(turn, userIndex),
-        level: 1,
-        kind: "user",
-        messageId: messageIdFromTurn(turn),
-        headingIndex: null,
-        element: turn
+      turns.push({
+        element: turn,
+        id,
+        outlineItems: [{
+          id: stableOutlineId(turn, "user", userIndex),
+          label: userLabel(turn, userIndex),
+          level: 1,
+          kind: "user",
+          messageId: id,
+          headingIndex: null,
+          element: turn
+        }],
+        role
       });
       return;
     }
 
     if (role === "assistant") {
       answerIndex += 1;
-      items.push(...answerStructureItems(turn, answerIndex));
+      turns.push({
+        element: turn,
+        id,
+        outlineItems: answerStructureItems(turn, answerIndex),
+        role
+      });
     }
   });
 
-  return items.filter((item) => item.element && isVisible(item.element));
+  return turns;
+}
+
+export function collectDomOutlineItems(): OutlineItem[] {
+  return collectDomOutlineTurns()
+    .flatMap((turn) => turn.outlineItems)
+    .filter((item) => item.element && isVisible(item.element));
 }
 
 function findMessageElement(messageId: string): HTMLElement | null {

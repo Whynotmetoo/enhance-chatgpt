@@ -1,8 +1,6 @@
 import { fetchConversationInPageContext } from "../../lib/chatGptApiBridge";
-import type { OutlineItem } from "./types";
-import { isRecord, normalizeLabel, numberValue, stringValue } from "./utils";
-
-type ApiAuthorRole = "user" | "assistant" | "system" | "tool";
+import type { OutlineItem, OutlineNodeRole, OutlineTree, OutlineTreeNode } from "./types";
+import { isRecord, normalizeLabel, stringValue } from "./utils";
 
 type ApiMessage = {
   id?: unknown;
@@ -26,11 +24,6 @@ type ApiConversation = {
   mapping?: unknown;
 };
 
-type OrderedApiMessage = {
-  nodeId: string;
-  message: ApiMessage;
-};
-
 type MarkdownHeading = {
   label: string;
   level: number;
@@ -41,7 +34,7 @@ type MarkdownFence = {
   length: number;
 };
 
-function apiMessageRole(message: ApiMessage): ApiAuthorRole | null {
+function apiMessageRole(message: ApiMessage): OutlineNodeRole {
   const role = message.author?.role;
   return role === "user" || role === "assistant" || role === "system" || role === "tool" ? role : null;
 }
@@ -197,148 +190,116 @@ function rootNodeIds(mapping: Map<string, ApiMappingNode>): string[] {
   return roots.length > 0 ? roots : Array.from(mapping.keys());
 }
 
-function currentNodePath(conversation: ApiConversation, mapping: Map<string, ApiMappingNode>): string[] {
-  const currentNodeId = stringValue(conversation.current_node);
-  if (!currentNodeId || !mapping.has(currentNodeId)) {
-    return [];
-  }
-
-  const path: string[] = [];
-  const seen = new Set<string>();
-  let nodeId: string | null = currentNodeId;
-
-  while (nodeId && mapping.has(nodeId) && !seen.has(nodeId)) {
-    seen.add(nodeId);
-    path.push(nodeId);
-    nodeId = stringValue(mapping.get(nodeId)?.parent);
-  }
-
-  return path.reverse();
-}
-
-function orderedApiMessages(conversation: ApiConversation): OrderedApiMessage[] {
-  const mapping = apiMapping(conversation);
-  const currentPathMessages = currentNodePath(conversation, mapping)
-    .map((nodeId) => {
-      const message = mapping.get(nodeId)?.message;
-      return isRecord(message) ? { nodeId, message: message as ApiMessage } : null;
-    })
-    .filter((message): message is OrderedApiMessage => message !== null);
-
-  if (currentPathMessages.length > 0) {
-    return currentPathMessages;
-  }
-
-  const seen = new Set<string>();
-  const orderedMessages: OrderedApiMessage[] = [];
-
-  const visit = (nodeId: string) => {
-    if (seen.has(nodeId)) {
-      return;
-    }
-
-    const node = mapping.get(nodeId);
-    if (!node) {
-      return;
-    }
-
-    seen.add(nodeId);
-    if (isRecord(node.message)) {
-      orderedMessages.push({ nodeId, message: node.message as ApiMessage });
-    }
-
-    nodeChildren(node).forEach(visit);
-  };
-
-  rootNodeIds(mapping).forEach(visit);
-
-  const unvisitedMessages = Array.from(mapping.entries())
-    .filter(([id, node]) => !seen.has(id) && isRecord(node.message))
-    .map(([nodeId, node]) => ({ nodeId, message: node.message as ApiMessage }))
-    .sort((a, b) => numberValue(a.message.create_time) - numberValue(b.message.create_time));
-
-  return [...orderedMessages, ...unvisitedMessages];
-}
-
 function messageId(message: ApiMessage, fallback: string): string {
   return stringValue(message.id) ?? fallback;
 }
 
-function itemsFromApiConversation(conversation: ApiConversation): OutlineItem[] {
+function outlineItemsFromApiMessage(nodeId: string, message: ApiMessage): OutlineItem[] {
   const items: OutlineItem[] = [];
-  let userIndex = 0;
-  let answerIndex = 0;
 
-  orderedApiMessages(conversation).forEach(({ nodeId, message }, index) => {
-    if (isHiddenApiMessage(message)) {
+  if (isHiddenApiMessage(message)) {
+    return items;
+  }
+
+  const role = apiMessageRole(message);
+  if (role !== "user" && role !== "assistant") {
+    return items;
+  }
+
+  const id = nodeId || messageId(message, "message");
+  const text = textFromMessage(message);
+
+  if (role === "user") {
+    items.push({
+      id: `outline-user-${id}`,
+      label: normalizeLabel(text, "User message"),
+      level: 1,
+      kind: "user",
+      messageId: id,
+      headingIndex: null,
+      element: null
+    });
+    return items;
+  }
+
+  if (!isTextualMessage(message) || !text.trim()) {
+    return items;
+  }
+
+  const headings = markdownHeadings(text);
+  if (headings.length === 0) {
+    return items;
+  }
+
+  const topHeadingLevel = Math.min(...headings.map((heading) => heading.level));
+  headings.forEach((heading, headingIndex) => {
+    if (heading.level !== topHeadingLevel) {
       return;
     }
 
-    const role = apiMessageRole(message);
-    if (role !== "user" && role !== "assistant") {
-      return;
-    }
-
-    const id = nodeId || messageId(message, `message-${index}`);
-    const text = textFromMessage(message);
-
-    if (role === "user") {
-      userIndex += 1;
-      answerIndex = 0;
-      items.push({
-        id: `outline-user-${id}`,
-        label: normalizeLabel(text, `User message ${userIndex}`),
-        level: 1,
-        kind: "user",
-        messageId: id,
-        headingIndex: null,
-        element: null
-      });
-      return;
-    }
-
-    if (!isTextualMessage(message) || !text.trim()) {
-      return;
-    }
-
-    answerIndex += 1;
-    const headings = markdownHeadings(text);
-    if (headings.length === 0) {
-      return;
-    }
-
-    const topHeadingLevel = Math.min(...headings.map((heading) => heading.level));
-    headings.forEach((heading, headingIndex) => {
-      if (heading.level !== topHeadingLevel) {
-        return;
-      }
-
-      items.push({
-        id: `outline-heading-${id}-${headingIndex}`,
-        label: normalizeLabel(heading.label, `ChatGPT response ${answerIndex}`),
-        level: 2,
-        kind: "heading",
-        messageId: id,
-        headingIndex,
-        element: null
-      });
+    items.push({
+      id: `outline-heading-${id}-${headingIndex}`,
+      label: normalizeLabel(heading.label, "ChatGPT response"),
+      level: 2,
+      kind: "heading",
+      messageId: id,
+      headingIndex,
+      element: null
     });
   });
 
   return items;
 }
 
-async function fetchConversationOutline(
+function fallbackActiveNodeId(nodes: ReadonlyMap<string, OutlineTreeNode>, roots: string[]): string | null {
+  const leaves = Array.from(nodes.values()).filter((node) => node.children.length === 0);
+  return leaves[leaves.length - 1]?.id ?? roots[roots.length - 1] ?? null;
+}
+
+function treeFromApiConversation(conversationId: string, conversation: ApiConversation): OutlineTree | null {
+  const mapping = apiMapping(conversation);
+  if (mapping.size === 0) {
+    return null;
+  }
+
+  const nodes = new Map<string, OutlineTreeNode>();
+
+  mapping.forEach((node, nodeId) => {
+    const message = isRecord(node.message) ? (node.message as ApiMessage) : null;
+    const parentId = stringValue(node.parent);
+
+    nodes.set(nodeId, {
+      children: nodeChildren(node).filter((childId) => mapping.has(childId)),
+      element: null,
+      id: nodeId,
+      outlineItems: message ? outlineItemsFromApiMessage(nodeId, message) : [],
+      parentId: parentId && mapping.has(parentId) ? parentId : null,
+      role: message ? apiMessageRole(message) : null
+    });
+  });
+
+  const roots = rootNodeIds(mapping);
+  const currentNodeId = stringValue(conversation.current_node);
+
+  return {
+    activeNodeId: currentNodeId && nodes.has(currentNodeId) ? currentNodeId : fallbackActiveNodeId(nodes, roots),
+    conversationId,
+    nodes,
+    rootIds: roots
+  };
+}
+
+async function fetchConversationOutlineTree(
   conversationId: string,
   signal: AbortSignal,
   minCapturedAt: number
-): Promise<OutlineItem[]> {
+): Promise<OutlineTree | null> {
   const conversation = (await fetchConversationInPageContext(
     conversationId,
     signal,
     minCapturedAt
   )) as ApiConversation;
-  return itemsFromApiConversation(conversation);
+  return treeFromApiConversation(conversationId, conversation);
 }
 
 function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
@@ -356,11 +317,11 @@ function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-export async function fetchConversationOutlineWithRetry(
+export async function fetchConversationOutlineTreeWithRetry(
   conversationId: string,
   signal: AbortSignal,
   minCapturedAt: number
-): Promise<OutlineItem[]> {
+): Promise<OutlineTree | null> {
   const retryDelays = [0, 350, 900];
   let lastError: unknown = null;
 
@@ -370,7 +331,7 @@ export async function fetchConversationOutlineWithRetry(
     }
 
     try {
-      return await fetchConversationOutline(conversationId, signal, minCapturedAt);
+      return await fetchConversationOutlineTree(conversationId, signal, minCapturedAt);
     } catch (error) {
       if (signal.aborted) {
         throw error;
