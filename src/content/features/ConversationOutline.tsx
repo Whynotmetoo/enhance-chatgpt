@@ -155,6 +155,7 @@ export function ConversationOutline(): ReactElement | null {
     const scheduleUpdate = debounce(update, 150);
     const observer = new MutationObserver(scheduleUpdate);
 
+    update();
     observer.observe(conversationMutationRoot(), { attributes: true, characterData: true, childList: true, subtree: true });
 
     return () => {
