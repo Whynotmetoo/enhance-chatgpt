@@ -102,10 +102,15 @@
   color: var(--ecg-text-soft);
   cursor: default;
   opacity: 0.34;
+  pointer-events: none;
 }
 
 .ecg-bulk-action-button:disabled:hover {
   background: transparent;
+}
+
+.ecg-bulk-tooltip-trigger {
+  display: inline-flex;
 }
 
 .ecg-bulk-native-action-button {

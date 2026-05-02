@@ -26,7 +26,7 @@ export function PromptIconButton({ children, label, onClick }: PromptIconButtonP
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content className="ecg-prompt-tooltip" side="top" sideOffset={7}>
+        <Tooltip.Content className="ecg-prompt-tooltip" side="bottom" sideOffset={7}>
           {label}
           <Tooltip.Arrow className="ecg-prompt-tooltip-arrow" />
         </Tooltip.Content>

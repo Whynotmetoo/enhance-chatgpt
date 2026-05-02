@@ -361,7 +361,7 @@ export function PromptManager(): ReactElement | null {
           </button>
         </Tooltip.Trigger>
         <Tooltip.Portal>
-          <Tooltip.Content className="ecg-prompt-tooltip" side="top" sideOffset={7}>
+          <Tooltip.Content className="ecg-prompt-tooltip" side="bottom" sideOffset={7}>
             Prompt manager
             <Tooltip.Arrow className="ecg-prompt-tooltip-arrow" />
           </Tooltip.Content>
