@@ -1,17 +1,18 @@
 import type { CSSProperties, ReactElement } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { debounce } from "../lib/dom";
-import { fetchConversationOutlineWithRetry } from "./conversationOutline/apiOutline";
+import { fetchConversationOutlineTreeWithRetry } from "./conversationOutline/apiOutline";
 import { pendingScrollDelayMs } from "./conversationOutline/constants";
 import {
   bindOutlineItems,
-  collectDomOutlineItems,
+  collectDomOutlineTurns,
   connectedElement,
   conversationMutationRoot
 } from "./conversationOutline/domOutline";
 import { useConversationLocation, useConversationStateActivity, useRightSidePanel } from "./conversationOutline/hooks";
 import { visibleActiveItemId, visibleOutlineItems } from "./conversationOutline/rendering";
 import { nextPendingScroll, scrollContainerFor, scrollToOutlineItem } from "./conversationOutline/scroll";
+import { activePathItems, createEmptyOutlineTree, mergeDomOutlineTurns, treeHasOutlineItems } from "./conversationOutline/tree";
 import type { OutlineItem, OutlineSource, PendingScroll, RenderedOutlineItem } from "./conversationOutline/types";
 
 type OutlineDepthStyle = CSSProperties & {
@@ -21,118 +22,17 @@ type OutlineDepthStyle = CSSProperties & {
 const initialActiveRefreshDelays = [80, 240, 600, 1000];
 const domFallbackDelayMs = 12_000;
 
-function outlineItemKey(item: OutlineItem): string {
-  if (!item.messageId) {
-    return `id:${item.id}`;
-  }
-
-  return item.headingIndex === null
-    ? `${item.kind}:${item.messageId}`
-    : `${item.kind}:${item.messageId}:${item.headingIndex}`;
-}
-
-function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem): OutlineItem {
-  return {
-    ...incoming,
-    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element
-  };
-}
-
-function outlineItemIndexes(items: OutlineItem[]): Map<string, number> {
-  return new Map(items.map((item, index) => [outlineItemKey(item), index]));
-}
-
-function outlineInsertionIndex(
-  itemIndexes: ReadonlyMap<string, number>,
-  incomingItems: OutlineItem[],
-  incomingIndex: number,
-  fallbackIndex: number
-): number {
-  for (let cursor = incomingIndex - 1; cursor >= 0; cursor -= 1) {
-    const previousIndex = itemIndexes.get(outlineItemKey(incomingItems[cursor]));
-    if (previousIndex !== undefined) {
-      return previousIndex + 1;
-    }
-  }
-
-  for (let cursor = incomingIndex + 1; cursor < incomingItems.length; cursor += 1) {
-    const nextIndex = itemIndexes.get(outlineItemKey(incomingItems[cursor]));
-    if (nextIndex !== undefined) {
-      return nextIndex;
-    }
-  }
-
-  return fallbackIndex;
-}
-
-function mergeOutlineItems(currentItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
-  const mergedItems = [...currentItems];
-  let itemIndexes = outlineItemIndexes(mergedItems);
-
-  incomingItems.forEach((item, incomingIndex) => {
-    const key = outlineItemKey(item);
-    const existingIndex = itemIndexes.get(key);
-
-    if (existingIndex === undefined) {
-      const insertionIndex = outlineInsertionIndex(itemIndexes, incomingItems, incomingIndex, mergedItems.length);
-      mergedItems.splice(insertionIndex, 0, item);
-      itemIndexes = outlineItemIndexes(mergedItems);
-      return;
-    }
-
-    mergedItems[existingIndex] = mergeExistingOutlineItem(mergedItems[existingIndex], item);
-  });
-
-  return mergedItems;
-}
-
-function appendMissingOutlineItems(baseItems: OutlineItem[], extraItems: OutlineItem[]): OutlineItem[] {
-  const mergedItems = [...baseItems];
-  const itemIndexes = new Map(mergedItems.map((item, index) => [outlineItemKey(item), index]));
-
-  extraItems.forEach((item) => {
-    const key = outlineItemKey(item);
-    const existingIndex = itemIndexes.get(key);
-
-    if (existingIndex === undefined) {
-      itemIndexes.set(key, mergedItems.length);
-      mergedItems.push(item);
-      return;
-    }
-
-    const existing = mergedItems[existingIndex];
-    mergedItems[existingIndex] = {
-      ...existing,
-      element: connectedElement(existing.element) ?? connectedElement(item.element) ?? existing.element
-    };
-  });
-
-  return mergedItems;
-}
-
-function liveOutlineItems(apiItems: OutlineItem[], currentItems: OutlineItem[], includeDomItems: boolean): OutlineItem[] {
-  const boundApiItems = bindOutlineItems(apiItems);
-  if (!includeDomItems) {
-    return boundApiItems;
-  }
-
-  const accumulatedItems = appendMissingOutlineItems(boundApiItems, currentItems);
-
-  return mergeOutlineItems(accumulatedItems, collectDomOutlineItems());
-}
-
 export function ConversationOutline(): ReactElement | null {
   const conversationLocation = useConversationLocation();
   const { conversationId } = conversationLocation;
-  const [source, setSource] = useState<OutlineSource>({ conversationId: null, mode: "api", items: [] });
-  const [items, setItems] = useState<OutlineItem[]>([]);
+  const [source, setSource] = useState<OutlineSource>({ conversationId: null, mode: "api", tree: null });
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
-  const lastApiItemsRef = useRef<OutlineItem[] | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
   const hasConversationStateActivity = useConversationStateActivity(conversationId, conversationLocation.changedAt);
   const [domFallbackReady, setDomFallbackReady] = useState(false);
+  const items = useMemo<OutlineItem[]>(() => bindOutlineItems(activePathItems(source.tree)), [source.tree]);
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
   useEffect(() => {
@@ -147,34 +47,30 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     if (!conversationId) {
-      lastApiItemsRef.current = null;
-      setSource({ conversationId: null, mode: "dom", items: [] });
-      setItems([]);
+      setSource({ conversationId: null, mode: "dom", tree: null });
       setActiveId(null);
       setPendingScroll(null);
       return;
     }
 
     const controller = new AbortController();
-    lastApiItemsRef.current = null;
-    setSource({ conversationId, mode: "api", items: [] });
-    setItems([]);
+    setSource({ conversationId, mode: "api", tree: null });
     setActiveId(null);
     setPendingScroll(null);
 
-    fetchConversationOutlineWithRetry(conversationId, controller.signal, conversationLocation.changedAt)
-      .then((outlineItems) => {
+    fetchConversationOutlineTreeWithRetry(conversationId, controller.signal, conversationLocation.changedAt)
+      .then((tree) => {
         if (!controller.signal.aborted) {
           setSource({
             conversationId,
-            mode: outlineItems.length > 0 ? "api" : "dom",
-            items: outlineItems
+            mode: treeHasOutlineItems(tree) ? "api" : "dom",
+            tree
           });
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setSource({ conversationId, mode: "dom", items: [] });
+          setSource({ conversationId, mode: "dom", tree: null });
         }
       });
 
@@ -187,30 +83,46 @@ export function ConversationOutline(): ReactElement | null {
 
   useEffect(() => {
     if (!conversationId) {
-      lastApiItemsRef.current = null;
-      setItems([]);
       return;
     }
 
     if (source.conversationId !== conversationId) {
-      lastApiItemsRef.current = null;
-      setItems([]);
       return;
     }
 
     if (source.mode === "dom") {
-      lastApiItemsRef.current = null;
       if (!hasConversationStateActivity && !domFallbackReady) {
-        setItems([]);
         return;
       }
 
-      const update = () => setItems((currentItems) => mergeOutlineItems(currentItems, collectDomOutlineItems()));
+      const update = () => {
+        const turns = collectDomOutlineTurns();
+        if (turns.length === 0) {
+          return;
+        }
+
+        setSource((current) => {
+          if (current.conversationId !== conversationId || current.mode !== "dom") {
+            return current;
+          }
+
+          const tree = current.tree ?? createEmptyOutlineTree(conversationId);
+          const nextTree = mergeDomOutlineTurns(tree, turns);
+          if (nextTree === tree) {
+            return current;
+          }
+
+          return {
+            ...current,
+            tree: nextTree
+          };
+        });
+      };
       const scheduleUpdate = debounce(update, 150);
       const observer = new MutationObserver(scheduleUpdate);
 
       update();
-      observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
+      observer.observe(conversationMutationRoot(), { attributes: true, characterData: true, childList: true, subtree: true });
 
       return () => {
         scheduleUpdate.cancel();
@@ -219,23 +131,38 @@ export function ConversationOutline(): ReactElement | null {
     }
 
     const update = () => {
-      const apiItemsChanged = lastApiItemsRef.current !== source.items;
-      lastApiItemsRef.current = source.items;
-      setItems((currentItems) =>
-        liveOutlineItems(source.items, apiItemsChanged ? [] : currentItems, hasConversationStateActivity)
-      );
+      const turns = collectDomOutlineTurns();
+      if (turns.length === 0) {
+        return;
+      }
+
+      setSource((current) => {
+        if (current.conversationId !== conversationId || current.mode !== "api" || !current.tree) {
+          return current;
+        }
+
+        const nextTree = mergeDomOutlineTurns(current.tree, turns);
+        if (nextTree === current.tree) {
+          return current;
+        }
+
+        return {
+          ...current,
+          tree: nextTree
+        };
+      });
     };
     const scheduleUpdate = debounce(update, 150);
     const observer = new MutationObserver(scheduleUpdate);
 
     update();
-    observer.observe(conversationMutationRoot(), { childList: true, subtree: true });
+    observer.observe(conversationMutationRoot(), { attributes: true, characterData: true, childList: true, subtree: true });
 
     return () => {
       scheduleUpdate.cancel();
       observer.disconnect();
     };
-  }, [conversationId, conversationLocation.changedAt, domFallbackReady, hasConversationStateActivity, source]);
+  }, [conversationId, domFallbackReady, hasConversationStateActivity, source.conversationId, source.mode]);
 
   useEffect(() => {
     const observableItems = items
