@@ -1,0 +1,87 @@
+:root {
+  background: #f5f4ef;
+  color: #22211d;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 312px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.popup-page {
+  background: #fffdf8;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.popup-header {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 40px 1fr;
+}
+
+.popup-header img {
+  border-radius: 12px;
+  display: block;
+}
+
+.popup-header h1 {
+  font-size: 18px;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0 0 4px;
+}
+
+.popup-header p {
+  color: #625f56;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.popup-actions {
+  border-top: 1px solid #e5e2d8;
+  display: grid;
+  padding-top: 4px;
+}
+
+.popup-actions a {
+  align-items: center;
+  border-bottom: 1px solid #e5e2d8;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 44px;
+}
+
+.popup-actions a:last-child {
+  border-bottom: 0;
+}
+
+.popup-actions a:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid #2f6fed;
+  outline-offset: 3px;
+}
+
+.popup-actions a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}

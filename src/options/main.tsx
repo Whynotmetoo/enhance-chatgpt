@@ -1,79 +1,37 @@
 import type { ReactElement } from "react";
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import type { SavedPrompt } from "../shared/promptTypes";
-import { loadPrompts, savePrompts } from "../content/lib/browserStorage";
+import {
+  FEEDBACK_EMAIL,
+  GITHUB_REPOSITORY_URL,
+  SUPPORT_EXTENSION_URL
+} from "../shared/constants";
 import "./styles.css";
 
-function createPromptId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `prompt-${Date.now()}`;
-}
-
 function OptionsApp(): ReactElement {
-  const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
-  const [draft, setDraft] = useState("");
-
-  useEffect(() => {
-    void loadPrompts().then(setPrompts);
-  }, []);
-
-  async function persist(nextPrompts: SavedPrompt[]): Promise<void> {
-    setPrompts(nextPrompts);
-    await savePrompts(nextPrompts);
-  }
-
-  async function addPrompt(): Promise<void> {
-    const body = draft.trim();
-    if (!body) {
-      return;
-    }
-
-    const firstLine = body.split(/\n+/)[0] || "Saved prompt";
-    const prompt: SavedPrompt = {
-      id: createPromptId(),
-      title: firstLine.slice(0, 64),
-      body,
-      createdAt: new Date().toISOString()
-    };
-
-    await persist([prompt, ...prompts]);
-    setDraft("");
-  }
-
   return (
     <main className="options-page">
-      <section className="options-header">
-        <h1>Enhance ChatGPT</h1>
-        <p>Saved prompts are stored locally with the extension.</p>
-      </section>
-      <section className="prompt-editor">
-        <label htmlFor="new-prompt">New prompt</label>
-        <textarea
-          id="new-prompt"
-          placeholder="Paste a reusable prompt..."
-          rows={6}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button type="button" onClick={addPrompt}>
-          Save prompt
-        </button>
-      </section>
-      <section className="prompt-list" aria-label="Saved prompts">
-        {prompts.map((prompt) => (
-          <article className="prompt-card" key={prompt.id}>
-            <div>
-              <h2>{prompt.title}</h2>
-              <p>{prompt.body}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void persist(prompts.filter((item) => item.id !== prompt.id))}
-            >
-              Delete
-            </button>
-          </article>
-        ))}
+      <section className="options-panel" aria-labelledby="options-title">
+        <img className="extension-icon" src="/icons/128.png" alt="" width="88" height="88" />
+        <div className="options-copy">
+          <h1 id="options-title">EnhanceGPT</h1>
+          <p className="description">Small upgrades for a cleaner ChatGPT workflow.</p>
+        </div>
+
+        <nav className="support-links" aria-label="Support links">
+          <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">
+            <span>GitHub</span>
+            <strong>View source</strong>
+          </a>
+          <a href={SUPPORT_EXTENSION_URL} target="_blank" rel="noreferrer">
+            <span>Support This Extension</span>
+            <strong>Donate</strong>
+          </a>
+          <a href={`mailto:${FEEDBACK_EMAIL}`}>
+            <span>Feedback</span>
+            <strong>{FEEDBACK_EMAIL}</strong>
+          </a>
+        </nav>
       </section>
     </main>
   );
