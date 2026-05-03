@@ -17,7 +17,6 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        mockups: resolve(rootDir, "mockups.html"),
         options: resolve(rootDir, "options.html")
       },
       output: {
