@@ -3,17 +3,19 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 
 type PromptIconButtonProps = {
   children: ReactElement;
+  disabled?: boolean;
   label: string;
   onClick: () => void;
 };
 
-export function PromptIconButton({ children, label, onClick }: PromptIconButtonProps): ReactElement {
+export function PromptIconButton({ children, disabled = false, label, onClick }: PromptIconButtonProps): ReactElement {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
         <button
           aria-label={label}
           className="ecg-prompt-icon-button"
+          disabled={disabled}
           type="button"
           onClick={onClick}
           onKeyDown={(event) => {

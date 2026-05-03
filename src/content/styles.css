@@ -656,6 +656,13 @@
   outline: none;
 }
 
+.ecg-prompt-icon-button:disabled {
+  background: transparent;
+  color: var(--ecg-text-soft);
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .ecg-prompt-empty {
   color: var(--ecg-text-muted);
   font-size: 14px;
