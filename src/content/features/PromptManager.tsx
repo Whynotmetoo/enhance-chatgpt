@@ -1,7 +1,7 @@
 import { BookmarkIcon } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SavedPrompt } from "../../shared/promptTypes";
 import { AlertModal } from "../components/AlertModal";
@@ -60,6 +60,13 @@ export function PromptManager(): ReactElement | null {
   const titleError = draft.submitted && draft.title.trim() === "" ? "Title is required" : null;
   const bodyError = draft.submitted && draft.body.trim() === "" ? "Prompt is required" : null;
 
+  const closeCleanEditor = useCallback((): void => {
+    if (editorMode && !hasUnsavedDraft) {
+      setDraft(emptyDraft());
+      setEditorMode(null);
+    }
+  }, [editorMode, hasUnsavedDraft]);
+
   useEffect(() => {
     void loadPrompts().then(setPrompts);
   }, []);
@@ -108,7 +115,7 @@ export function PromptManager(): ReactElement | null {
       document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
       document.removeEventListener("focusin", closeOnOutsideFocus, true);
     };
-  }, [anchors, deletePromptId, hasBlockingEditor, isOpen]);
+  }, [anchors, closeCleanEditor, deletePromptId, hasBlockingEditor, isOpen]);
 
   useEffect(() => {
     if (!hasUnsavedDraft) {
@@ -202,13 +209,6 @@ export function PromptManager(): ReactElement | null {
   async function persist(nextPrompts: SavedPrompt[]): Promise<void> {
     setPrompts(nextPrompts);
     await savePrompts(nextPrompts);
-  }
-
-  function closeCleanEditor(): void {
-    if (editorMode && !hasUnsavedDraft) {
-      setDraft(emptyDraft());
-      setEditorMode(null);
-    }
   }
 
   function insertPrompt(prompt: SavedPrompt): void {

@@ -130,9 +130,13 @@ function fallbackStorageKeyFor(storageKey: string): string {
     : `enhance-chatgpt:${storageKey}`;
 }
 
+function isChatGptHost(hostname: string): boolean {
+  return hostname.endsWith("chatgpt.com") || hostname === "chat.openai.com";
+}
+
 async function currentPromptStorageKey(): Promise<string> {
   const location = globalThis.location;
-  if (!location.hostname.endsWith("chatgpt.com")) {
+  if (!isChatGptHost(location.hostname)) {
     return PROMPTS_STORAGE_KEY;
   }
 
@@ -155,10 +159,8 @@ async function currentPromptStorageKey(): Promise<string> {
 }
 
 async function removeLegacyPrompts(): Promise<void> {
-  const removedFromExtension = await storageRemove(PROMPTS_STORAGE_KEY);
-  if (!removedFromExtension) {
-    globalThis.localStorage?.removeItem(fallbackStorageKey);
-  }
+  await storageRemove(PROMPTS_STORAGE_KEY);
+  globalThis.localStorage?.removeItem(fallbackStorageKey);
 }
 
 export async function loadPrompts(): Promise<SavedPrompt[]> {
