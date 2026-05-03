@@ -24,6 +24,7 @@ export function PromptEditor({
 }: PromptEditorProps): ReactElement {
   const titleId = `ecg-prompt-${mode.kind}-title`;
   const bodyId = `ecg-prompt-${mode.kind}-body`;
+  const isSaveDisabled = draft.title.trim() === "" || draft.body.trim() === "";
 
   return (
     <div className="ecg-prompt-editor">
@@ -58,7 +59,13 @@ export function PromptEditor({
         <button className="ecg-prompt-secondary" type="button" onClick={onCancel}>
           Cancel
         </button>
-        <button className="ecg-prompt-primary" type="button" onClick={onSave}>
+        <button
+          className="ecg-prompt-primary"
+          data-invalid={isSaveDisabled ? "true" : undefined}
+          disabled={isSaveDisabled}
+          type="button"
+          onClick={onSave}
+        >
           Save
         </button>
       </div>

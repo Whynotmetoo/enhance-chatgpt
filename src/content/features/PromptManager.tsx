@@ -1,9 +1,4 @@
-import {
-  BookmarkIcon,
-  Pencil1Icon,
-  PlusIcon,
-  TrashIcon
-} from "@radix-ui/react-icons";
+import { BookmarkIcon } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +12,7 @@ import {
   readPromptInput,
   writePromptInput
 } from "../lib/dom";
+import { ChatGptAddIcon, ChatGptEditIcon, ChatGptTrashIcon } from "../lib/icons";
 import { PromptEditor } from "./promptManager/PromptEditor";
 import { PromptIconButton } from "./promptManager/PromptIconButton";
 import type { PromptDraft, PromptEditorMode } from "./promptManager/types";
@@ -424,11 +420,11 @@ export function PromptManager(): ReactElement | null {
                         </span>
                       </button>
                       <span className="ecg-prompt-actions">
-                        <PromptIconButton label={`Edit prompt: ${prompt.title}`} onClick={() => openEditEditor(prompt)}>
-                          <Pencil1Icon />
+                        <PromptIconButton label="Edit" onClick={() => openEditEditor(prompt)}>
+                          <ChatGptEditIcon />
                         </PromptIconButton>
-                        <PromptIconButton label={`Delete prompt: ${prompt.title}`} onClick={() => setDeletePromptId(prompt.id)}>
-                          <TrashIcon />
+                        <PromptIconButton label="Delete" onClick={() => setDeletePromptId(prompt.id)}>
+                          <ChatGptTrashIcon />
                         </PromptIconButton>
                       </span>
                     </div>
@@ -452,9 +448,9 @@ export function PromptManager(): ReactElement | null {
             ) : null}
             {!editorMode ? (
               <div className="ecg-prompt-footer">
-                <PromptIconButton label="Create prompt" onClick={openCreateEditor}>
-                  <PlusIcon />
-                </PromptIconButton>
+                <button className="ecg-prompt-create-button" type="button" onClick={openCreateEditor}>
+                  <ChatGptAddIcon />
+                </button>
               </div>
             ) : null}
             <AlertModal

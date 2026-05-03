@@ -162,6 +162,34 @@ export function PlusIcon(props: IconProps): ReactElement {
   );
 }
 
+export function ChatGptAddIcon(props: IconProps): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 20 20"
+      width="20"
+      {...props}
+    >
+      <path d="M10 4.5v11" />
+      <path d="M4.5 10h11" />
+    </svg>
+  );
+}
+
+export function ChatGptEditIcon(props: IconProps): ReactElement {
+  return (
+    <svg aria-hidden="true" height="20" width="20" {...props}>
+      <use href="/cdn/assets/sprites-core-6d2147a0.svg#6d87e1" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function CloseIcon(props: IconProps): ReactElement {
   return (
     <IconBase {...props}>

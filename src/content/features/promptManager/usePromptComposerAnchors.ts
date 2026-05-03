@@ -4,10 +4,18 @@ import type { PromptComposerAnchors } from "./types";
 
 const promptTriggerHostAttribute = "data-ecg-prompt-trigger-host";
 const promptPanelHostAttribute = "data-ecg-prompt-panel-host";
+const promptPanelSideAttribute = "data-ecg-prompt-panel-side";
 const promptComposerLayerClass = "ecg-prompt-composer-layer";
 
 function sameAnchors(current: PromptComposerAnchors | null, next: PromptComposerAnchors | null): boolean {
   return current?.triggerHost === next?.triggerHost && current?.panelHost === next?.panelHost;
+}
+
+function syncPanelSide(form: HTMLElement, panelHost: HTMLElement): void {
+  const rect = form.getBoundingClientRect();
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  panelHost.setAttribute(promptPanelSideAttribute, spaceBelow > spaceAbove ? "bottom" : "top");
 }
 
 export function usePromptComposerAnchors(): PromptComposerAnchors | null {
@@ -48,6 +56,7 @@ export function usePromptComposerAnchors(): PromptComposerAnchors | null {
         form.append(panelHost);
         createdHosts.add(panelHost);
       }
+      syncPanelSide(form, panelHost);
 
       const nextAnchors = { panelHost, triggerHost };
       setAnchors((current) => (sameAnchors(current, nextAnchors) ? current : nextAnchors));
@@ -62,10 +71,14 @@ export function usePromptComposerAnchors(): PromptComposerAnchors | null {
 
     const observer = new MutationObserver(scheduleSyncAnchors);
     observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", scheduleSyncAnchors);
+    window.addEventListener("scroll", scheduleSyncAnchors, true);
 
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
+      window.removeEventListener("resize", scheduleSyncAnchors);
+      window.removeEventListener("scroll", scheduleSyncAnchors, true);
       createdHosts.forEach((host) => {
         if (host.childElementCount === 0) {
           host.remove();
