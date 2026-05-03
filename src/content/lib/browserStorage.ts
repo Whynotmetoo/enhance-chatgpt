@@ -5,6 +5,10 @@ type StorageArea = {
     key: string,
     callback?: (items: Record<string, unknown>) => void
   ) => Promise<Record<string, unknown>> | void;
+  remove?: (
+    key: string,
+    callback?: () => void
+  ) => Promise<void> | void;
   set: (
     items: Record<string, unknown>,
     callback?: () => void
@@ -18,6 +22,13 @@ type ExtensionApi = {
 };
 
 const fallbackStorageKey = `enhance-chatgpt:${PROMPTS_STORAGE_KEY}`;
+const chatGptSessionPath = "/api/auth/session";
+
+type ChatGptSession = {
+  user?: {
+    id?: unknown;
+  };
+};
 
 function extensionApi(): ExtensionApi | undefined {
   const scope = globalThis as typeof globalThis & {
@@ -72,6 +83,27 @@ async function storageSet(items: Record<string, unknown>): Promise<boolean> {
   }
 }
 
+async function storageRemove(key: string): Promise<boolean> {
+  const area = extensionApi()?.storage?.local;
+
+  if (!area?.remove) {
+    return false;
+  }
+
+  try {
+    const maybePromise = area.remove(key);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      await maybePromise;
+    }
+    return true;
+  } catch {
+    await new Promise<void>((resolve) => {
+      area.remove?.(key, () => resolve());
+    });
+    return true;
+  }
+}
+
 function isPromptList(value: unknown): value is SavedPrompt[] {
   return Array.isArray(value) && value.every((item) => {
     if (!item || typeof item !== "object") {
@@ -88,31 +120,96 @@ function isPromptList(value: unknown): value is SavedPrompt[] {
   });
 }
 
+function promptStorageKeyForUser(userId: string): string {
+  return `${PROMPTS_STORAGE_KEY}:user:${encodeURIComponent(userId)}`;
+}
+
+function fallbackStorageKeyFor(storageKey: string): string {
+  return storageKey === PROMPTS_STORAGE_KEY
+    ? fallbackStorageKey
+    : `enhance-chatgpt:${storageKey}`;
+}
+
+function isChatGptHost(hostname: string): boolean {
+  return hostname.endsWith("chatgpt.com") || hostname === "chat.openai.com";
+}
+
+async function currentPromptStorageKey(): Promise<string> {
+  const location = globalThis.location;
+  if (!isChatGptHost(location.hostname)) {
+    return PROMPTS_STORAGE_KEY;
+  }
+
+  try {
+    const response = await fetch(`${location.origin}${chatGptSessionPath}`, {
+      credentials: "include"
+    });
+    if (!response.ok) {
+      return PROMPTS_STORAGE_KEY;
+    }
+
+    const session = await response.json() as ChatGptSession;
+    const userId = session.user?.id;
+    return typeof userId === "string" && userId.length > 0
+      ? promptStorageKeyForUser(userId)
+      : PROMPTS_STORAGE_KEY;
+  } catch {
+    return PROMPTS_STORAGE_KEY;
+  }
+}
+
+async function removeLegacyPrompts(): Promise<void> {
+  await storageRemove(PROMPTS_STORAGE_KEY);
+  globalThis.localStorage?.removeItem(fallbackStorageKey);
+}
+
 export async function loadPrompts(): Promise<SavedPrompt[]> {
-  const extensionItems = await storageGet(PROMPTS_STORAGE_KEY);
-  const extensionPrompts = extensionItems?.[PROMPTS_STORAGE_KEY];
+  const storageKey = await currentPromptStorageKey();
+  const extensionItems = await storageGet(storageKey);
+  const extensionPrompts = extensionItems?.[storageKey];
 
   if (isPromptList(extensionPrompts)) {
     return extensionPrompts;
   }
 
-  const raw = globalThis.localStorage?.getItem(fallbackStorageKey);
+  if (storageKey !== PROMPTS_STORAGE_KEY) {
+    const legacyItems = await storageGet(PROMPTS_STORAGE_KEY);
+    const legacyPrompts = legacyItems?.[PROMPTS_STORAGE_KEY];
+
+    if (isPromptList(legacyPrompts)) {
+      await savePrompts(legacyPrompts);
+      await removeLegacyPrompts();
+      return legacyPrompts;
+    }
+  }
+
+  const raw = globalThis.localStorage?.getItem(fallbackStorageKeyFor(storageKey));
   if (!raw) {
     return [];
   }
 
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return isPromptList(parsed) ? parsed : [];
+    if (!isPromptList(parsed)) {
+      return [];
+    }
+
+    if (storageKey !== PROMPTS_STORAGE_KEY) {
+      await savePrompts(parsed);
+      await removeLegacyPrompts();
+    }
+
+    return parsed;
   } catch {
     return [];
   }
 }
 
 export async function savePrompts(prompts: SavedPrompt[]): Promise<void> {
-  const savedToExtension = await storageSet({ [PROMPTS_STORAGE_KEY]: prompts });
+  const storageKey = await currentPromptStorageKey();
+  const savedToExtension = await storageSet({ [storageKey]: prompts });
 
   if (!savedToExtension) {
-    globalThis.localStorage?.setItem(fallbackStorageKey, JSON.stringify(prompts));
+    globalThis.localStorage?.setItem(fallbackStorageKeyFor(storageKey), JSON.stringify(prompts));
   }
 }

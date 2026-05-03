@@ -1,12 +1,7 @@
-import {
-  BookmarkIcon,
-  Pencil1Icon,
-  PlusIcon,
-  TrashIcon
-} from "@radix-ui/react-icons";
+import { BookmarkIcon } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SavedPrompt } from "../../shared/promptTypes";
 import { AlertModal } from "../components/AlertModal";
@@ -17,6 +12,7 @@ import {
   readPromptInput,
   writePromptInput
 } from "../lib/dom";
+import { ChatGptAddIcon, ChatGptEditIcon, ChatGptTrashIcon } from "../lib/icons";
 import { PromptEditor } from "./promptManager/PromptEditor";
 import { PromptIconButton } from "./promptManager/PromptIconButton";
 import type { PromptDraft, PromptEditorMode } from "./promptManager/types";
@@ -46,7 +42,6 @@ export function PromptManager(): ReactElement | null {
         : null,
     [editorMode, prompts]
   );
-  const hasBlockingEditor = editorMode !== null;
   const hasUnsavedDraft = useMemo(() => {
     if (!editorMode) {
       return false;
@@ -61,8 +56,16 @@ export function PromptManager(): ReactElement | null {
         (draft.title !== editedPrompt.title || draft.body !== editedPrompt.body)
     );
   }, [draft, editedPrompt, editorMode]);
+  const hasBlockingEditor = hasUnsavedDraft;
   const titleError = draft.submitted && draft.title.trim() === "" ? "Title is required" : null;
   const bodyError = draft.submitted && draft.body.trim() === "" ? "Prompt is required" : null;
+
+  const closeCleanEditor = useCallback((): void => {
+    if (editorMode && !hasUnsavedDraft) {
+      setDraft(emptyDraft());
+      setEditorMode(null);
+    }
+  }, [editorMode, hasUnsavedDraft]);
 
   useEffect(() => {
     void loadPrompts().then(setPrompts);
@@ -94,12 +97,14 @@ export function PromptManager(): ReactElement | null {
 
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!hasBlockingEditor && deletePromptId === null && !containsPromptManager(event.target)) {
+        closeCleanEditor();
         setIsOpen(false);
       }
     };
 
     const closeOnOutsideFocus = (event: FocusEvent) => {
       if (!hasBlockingEditor && deletePromptId === null && !containsPromptManager(event.target)) {
+        closeCleanEditor();
         setIsOpen(false);
       }
     };
@@ -110,7 +115,7 @@ export function PromptManager(): ReactElement | null {
       document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
       document.removeEventListener("focusin", closeOnOutsideFocus, true);
     };
-  }, [anchors, deletePromptId, hasBlockingEditor, isOpen]);
+  }, [anchors, closeCleanEditor, deletePromptId, hasBlockingEditor, isOpen]);
 
   useEffect(() => {
     if (!hasUnsavedDraft) {
@@ -211,6 +216,8 @@ export function PromptManager(): ReactElement | null {
       return;
     }
 
+    closeCleanEditor();
+
     const input = findPromptInput();
     if (!input) {
       return;
@@ -226,6 +233,7 @@ export function PromptManager(): ReactElement | null {
       return;
     }
 
+    closeCleanEditor();
     await persist(prompts.filter((prompt) => prompt.id !== promptId));
     setDeletePromptId(null);
   }
@@ -239,6 +247,8 @@ export function PromptManager(): ReactElement | null {
       titleInputRef.current?.focus();
       return;
     }
+
+    closeCleanEditor();
 
     const input = findPromptInput();
     const body = input ? readPromptInput(input).replace(/\/\s*$/, "").trim() : "";
@@ -256,6 +266,16 @@ export function PromptManager(): ReactElement | null {
     setDraft({ body: prompt.body, submitted: false, title: prompt.title });
     setEditorMode({ kind: "edit", promptId: prompt.id });
     setIsOpen(true);
+  }
+
+  function requestDeletePrompt(promptId: string): void {
+    if (hasBlockingEditor) {
+      titleInputRef.current?.focus();
+      return;
+    }
+
+    closeCleanEditor();
+    setDeletePromptId(promptId);
   }
 
   function cancelEditor(): void {
@@ -309,6 +329,7 @@ export function PromptManager(): ReactElement | null {
 
     if (event.key === "Escape") {
       event.preventDefault();
+      closeCleanEditor();
       setIsOpen(false);
     }
 
@@ -339,6 +360,7 @@ export function PromptManager(): ReactElement | null {
       return;
     }
 
+    closeCleanEditor();
     setIsOpen(false);
   }
 
@@ -424,11 +446,11 @@ export function PromptManager(): ReactElement | null {
                         </span>
                       </button>
                       <span className="ecg-prompt-actions">
-                        <PromptIconButton label={`Edit prompt: ${prompt.title}`} onClick={() => openEditEditor(prompt)}>
-                          <Pencil1Icon />
+                        <PromptIconButton disabled={hasBlockingEditor} label="Edit" onClick={() => openEditEditor(prompt)}>
+                          <ChatGptEditIcon />
                         </PromptIconButton>
-                        <PromptIconButton label={`Delete prompt: ${prompt.title}`} onClick={() => setDeletePromptId(prompt.id)}>
-                          <TrashIcon />
+                        <PromptIconButton disabled={hasBlockingEditor} label="Delete" onClick={() => requestDeletePrompt(prompt.id)}>
+                          <ChatGptTrashIcon />
                         </PromptIconButton>
                       </span>
                     </div>
@@ -452,9 +474,9 @@ export function PromptManager(): ReactElement | null {
             ) : null}
             {!editorMode ? (
               <div className="ecg-prompt-footer">
-                <PromptIconButton label="Create prompt" onClick={openCreateEditor}>
-                  <PlusIcon />
-                </PromptIconButton>
+                <button className="ecg-prompt-create-button" type="button" onClick={openCreateEditor}>
+                  <ChatGptAddIcon />
+                </button>
               </div>
             ) : null}
             <AlertModal
