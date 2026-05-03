@@ -4,4 +4,4 @@ export const ARCHIVED_CHATS_SETTINGS_HASH = "#settings/DataControls/ArchivedChat
 
 export const CHATGPT_HOSTS = ["chatgpt.com", "chat.openai.com"] as const;
 
-export const SUPPORT_EXTENSION_URL = "https://github.com/Whynotmetoo/enhance-chatgpt";
+export const SUPPORT_EXTENSION_URL = "https://carsonye.com/enhancegpt/support/";
