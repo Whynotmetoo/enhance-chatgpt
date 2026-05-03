@@ -139,8 +139,6 @@ export function ConversationBulkManager(): ReactElement | null {
       const nextItems = collectConversationItems();
       if (isSelectionModeActive) {
         syncConversationCheckboxes(nextItems);
-      } else {
-        clearConversationControls();
       }
       setItems(nextItems);
     };
@@ -153,7 +151,7 @@ export function ConversationBulkManager(): ReactElement | null {
 
     return () => {
       observer.disconnect();
-      clearConversationControls();
+      scheduleUpdate.cancel();
     };
   }, [isSelectionModeActive, suppressedIds]);
 
@@ -239,8 +237,23 @@ export function ConversationBulkManager(): ReactElement | null {
   }, [isBulkRunning]);
 
   useEffect(() => {
-    document.documentElement.toggleAttribute("data-ecg-bulk-active", isSelectionModeActive);
+    if (isSelectionModeActive) {
+      document.documentElement.setAttribute("data-ecg-bulk-active", "");
+      return;
+    }
 
+    document.documentElement.removeAttribute("data-ecg-bulk-active");
+    clearConversationControls();
+  }, [isSelectionModeActive]);
+
+  useEffect(() => {
+    return () => {
+      document.documentElement.removeAttribute("data-ecg-bulk-active");
+      clearConversationControls();
+    };
+  }, []);
+
+  useEffect(() => {
     items.forEach((item) => {
       const isSelected = selectedIds.has(item.id);
       const checkbox = item.row.querySelector<HTMLButtonElement>(`.${checkboxClass}`);
@@ -253,11 +266,7 @@ export function ConversationBulkManager(): ReactElement | null {
         checkbox?.removeAttribute("data-selected");
       }
     });
-
-    return () => {
-      document.documentElement.removeAttribute("data-ecg-bulk-active");
-    };
-  }, [isSelectionModeActive, items, selectedIds]);
+  }, [items, selectedIds]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -576,25 +585,6 @@ export function ConversationBulkManager(): ReactElement | null {
     ? createPortal(
         <Tooltip.Provider delayDuration={350}>
           <div aria-label="Conversation batch operations" className="ecg-bulk-header-actions" role="toolbar">
-            <BulkTooltipButton
-              aria-label={isSelectionModeActive ? "Disable batch operations" : "Enable batch operations"}
-              aria-pressed={isSelectionModeActive}
-              className="ecg-bulk-action-button"
-              data-active={isSelectionModeActive}
-              disabled={isBulkRunning}
-              label={isSelectionModeActive ? "Disable batch operations" : "Enable batch operations"}
-              type="button"
-              onClick={() => setIsSelectionModeActive((value) => !value)}
-            >
-              <span
-                aria-hidden="true"
-                className="ecg-bulk-manager-icon"
-                style={{
-                  WebkitMaskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`,
-                  maskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`
-                }}
-              />
-            </BulkTooltipButton>
             {isSelectionModeActive ? (
               <>
                 <BulkTooltipButton
@@ -619,6 +609,25 @@ export function ConversationBulkManager(): ReactElement | null {
                 </BulkTooltipButton>
               </>
             ) : null}
+            <BulkTooltipButton
+              aria-label={isSelectionModeActive ? "Disable batch operations" : "Enable batch operations"}
+              aria-pressed={isSelectionModeActive}
+              className="ecg-bulk-action-button"
+              data-active={isSelectionModeActive}
+              disabled={isBulkRunning}
+              label={isSelectionModeActive ? "Disable batch operations" : "Enable batch operations"}
+              type="button"
+              onClick={() => setIsSelectionModeActive((value) => !value)}
+            >
+              <span
+                aria-hidden="true"
+                className="ecg-bulk-manager-icon"
+                style={{
+                  WebkitMaskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`,
+                  maskImage: `url("${extensionResourceUrl(bulkManagerIconPath)}")`
+                }}
+              />
+            </BulkTooltipButton>
             <div className="ecg-bulk-menu-root" ref={archiveMenuRootRef}>
               <BulkTooltipButton
                 aria-expanded={isArchiveMenuOpen}

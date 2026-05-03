@@ -18,13 +18,6 @@ The extension is intentionally implemented as an augmentation layer. It avoids f
 
 ```bash
 npm install
-npm run dev
-```
-
-Open the desktop mockups at:
-
-```text
-http://127.0.0.1:5173/mockups.html
 ```
 
 ## Build And Load In Chrome
@@ -45,17 +38,14 @@ Then load the `dist` directory in Chrome:
 ```text
 public/manifest.json        Manifest V3 extension manifest
 src/content/                ChatGPT content script and injected UI
-src/mockups/                Desktop UI mockups and component states
-src/options/                Lightweight prompt library management page
 src/shared/                 Shared constants and prompt types
 vite.content.config.ts      IIFE build for manifest content script
-docs/design.md              UI mapping and component breakdown
 ```
 
 ## Implementation Notes
 
 - The content script is scoped to `https://chatgpt.com/*` and `https://chat.openai.com/*`.
-- Prompt snippets are stored in `chrome.storage.local`, with `localStorage` fallback for mockup/dev contexts.
+- Prompt snippets are stored in `chrome.storage.local`, with `localStorage` fallback for non-extension development contexts.
 - Bulk delete/archive buttons currently emit `ecg:bulk-conversation-action` browser events instead of calling private ChatGPT APIs. This keeps the first version safe until a stable, explicit native-action adapter is implemented.
 - CSS is prefixed with `ecg-` and loaded as a static content-script stylesheet.
 - Conversation outlines prefer ChatGPT's conversation JSON endpoint so long threads can be indexed before every message is mounted in the DOM.
