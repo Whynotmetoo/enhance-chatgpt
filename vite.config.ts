@@ -17,7 +17,8 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        options: resolve(rootDir, "options.html")
+        options: resolve(rootDir, "options.html"),
+        popup: resolve(rootDir, "popup.html")
       },
       output: {
         entryFileNames: "assets/[name].js",
