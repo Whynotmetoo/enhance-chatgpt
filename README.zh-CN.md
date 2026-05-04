@@ -1,9 +1,6 @@
 <div align="center">
   <img src="public/icons/icon.svg" alt="Enhance ChatGPT 图标" width="96" height="96">
   <h1>Enhance ChatGPT</h1>
-  <div>
-    <a href="README.md">English</a> · <b>简体中文</b>
-  </div>
 </div>
 
 <p align="center">
@@ -12,6 +9,10 @@
   <a href="https://www.npmjs.com/"><img src="https://img.shields.io/badge/npm-%3E%3D10-cb3837?logo=npm&logoColor=white" alt="npm >=10"></a>
   <a href="https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3"><img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white" alt="Chrome Manifest V3"></a>
 </p>
+<div align="center">
+  <a href="README.md">English</a> · <b>简体中文</b>
+</div>
+<br>
 
 Enhance ChatGPT 是一个 Chrome 扩展，为 ChatGPT 网页端增加贴近原生体验的批量会话管理、常用提示词片段和会话大纲。它作为轻量增强层实现，避免全屏弹窗、厚重界面和明显的布局位移。
 
