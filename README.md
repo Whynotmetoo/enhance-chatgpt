@@ -28,17 +28,21 @@ EnhanceGPT is a Chrome extension that adds native-feeling bulk chat management, 
 <table>
   <tr>
     <th>Bulk Operation</th>
+  </tr>
+  <tr>
+    <td><img src="assets/bulk%20manager.gif" alt="Bulk conversation manager demo" width="100%"></td>
+  </tr>
+  <tr>
     <th>Prompt Manager</th>
   </tr>
   <tr>
-    <td width="50%"><img src="assets/bulk%20manager.gif" alt="Bulk conversation manager demo" width="100%"></td>
-    <td width="50%"><img src="assets/prompt%20manager.gif" alt="Prompt manager demo" width="100%"></td>
+    <td><img src="assets/prompt%20manager.gif" alt="Prompt manager demo" width="100%"></td>
   </tr>
   <tr>
-    <th colspan="2">Conversation Outline</th>
+    <th>Conversation Outline</th>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="assets/outline.gif" alt="Conversation outline demo" width="78%"></td>
+    <td><img src="assets/outline.gif" alt="Conversation outline demo" width="100%"></td>
   </tr>
 </table>
 
