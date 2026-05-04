@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="public/icons/icon.svg" alt="Enhance ChatGPT 图标" width="96" height="96">
-  <h1>Enhance ChatGPT</h1>
+  <img src="public/icons/icon.svg" alt="EnhanceGPT 图标" width="96" height="96">
+  <h1>EnhanceGPT</h1>
 </div>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </div>
 <br>
 
-Enhance ChatGPT 是一个 Chrome 扩展，为 ChatGPT 网页端增加贴近原生体验的批量会话管理、常用提示词片段和会话大纲。它作为轻量增强层实现，避免全屏弹窗、厚重界面和明显的布局位移。
+EnhanceGPT 是一个 Chrome 扩展，为 ChatGPT 网页端增加贴近原生体验的批量会话管理、常用提示词片段和会话大纲。它作为轻量增强层实现，避免全屏弹窗、厚重界面和明显的布局位移。
 
 ## 主要功能
 

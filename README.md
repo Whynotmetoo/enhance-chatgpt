@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="public/icons/icon.svg" alt="Enhance ChatGPT icon" width="96" height="96">
-  <h1>Enhance ChatGPT</h1>
+  <img src="public/icons/icon.svg" alt="EnhanceGPT icon" width="96" height="96">
+  <h1>EnhanceGPT</h1>
 </div>
 
 <p align="center">
@@ -13,7 +13,7 @@
     <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </div>
 <br>
-Enhance ChatGPT is a Chrome extension that adds native-feeling bulk chat management, reusable prompt snippets, and conversation outlines to the ChatGPT web app. It is implemented as a restrained augmentation layer, avoiding full-page modals, heavy surfaces, and layout-shifting DOM changes.
+EnhanceGPT is a Chrome extension that adds native-feeling bulk chat management, reusable prompt snippets, and conversation outlines to the ChatGPT web app. It is implemented as a restrained augmentation layer, avoiding full-page modals, heavy surfaces, and layout-shifting DOM changes.
 
 ## Key Features
 
