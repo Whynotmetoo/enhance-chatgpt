@@ -1,12 +1,46 @@
-# Enhance ChatGPT
+<div align="center">
+  <img src="public/icons/icon.svg" alt="Enhance ChatGPT icon" width="96" height="96">
+  <h1>Enhance ChatGPT</h1>
+</div>
 
-A Chrome extension that adds a restrained UI enhancement layer to the ChatGPT web app:
+<p align="center">
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19.0.0-149eca?logo=react&logoColor=white" alt="React 19.0.0"></a>
+  <a href="https://www.radix-ui.com/"><img src="https://img.shields.io/badge/Radix%20UI-1.3.2%20%2F%201.2.8-161618?logo=radixui&logoColor=white" alt="Radix UI 1.3.2 / 1.2.8"></a>
+  <a href="https://www.npmjs.com/"><img src="https://img.shields.io/badge/npm-%3E%3D10-cb3837?logo=npm&logoColor=white" alt="npm >=10"></a>
+  <a href="https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3"><img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white" alt="Chrome Manifest V3"></a>
+</p>
+<div align="center">
+    <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
+</div>
+<br>
+Enhance ChatGPT is a Chrome extension that adds native-feeling bulk chat management, reusable prompt snippets, and conversation outlines to the ChatGPT web app. It is implemented as a restrained augmentation layer, avoiding full-page modals, heavy surfaces, and layout-shifting DOM changes.
 
-- Bulk conversation selection in the left conversation list
-- Saved prompt dropdown above the bottom composer
-- Lightweight conversation outline in the right whitespace
+## Key Features
 
-The extension is intentionally implemented as an augmentation layer. It avoids full-page modals, heavy surfaces, and layout-shifting DOM changes.
+- Bulk-select conversations from the left sidebar for faster multi-chat workflows.
+- Archive or delete selected conversations from a focused bulk-action surface.
+- Save, edit, and reuse prompt snippets from a compact dropdown above the composer.
+- Generate a lightweight conversation outline in the right whitespace for quicker thread navigation.
+- Keep the experience native-feeling, lightweight, and unobtrusive.
+
+## Feature Showcase
+
+<table>
+  <tr>
+    <th>Bulk Operation</th>
+    <th>Prompt Manager</th>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/bulk%20manager.gif" alt="Bulk conversation manager demo" width="100%"></td>
+    <td width="50%"><img src="assets/prompt%20manager.gif" alt="Prompt manager demo" width="100%"></td>
+  </tr>
+  <tr>
+    <th colspan="2">Conversation Outline</th>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="assets/outline.gif" alt="Conversation outline demo" width="78%"></td>
+  </tr>
+</table>
 
 ## Requirements
 
