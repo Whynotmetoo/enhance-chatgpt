@@ -349,11 +349,12 @@
     void responsePromise
       .then((response) => {
         postConversationActivity("response", {
+          kind: "conversation-state",
           ok: response.ok,
           status: response.status
         });
       })
-      .catch(() => postConversationActivity("error"));
+      .catch(() => postConversationActivity("error", { kind: "conversation-state" }));
   }
 
   function observeConversationListResponse(responsePromise, requestedAt, context) {
@@ -382,7 +383,7 @@
       const requestedAt = Date.now();
       rememberBackendApiRequestHeaders(input, init);
       if (isConversationStateRequest) {
-        postConversationActivity("request");
+        postConversationActivity("request", { kind: "conversation-state" });
       }
 
       const responsePromise = fetchImplementation.apply(this, arguments);
@@ -495,6 +496,7 @@
       postConversationActivity(response.ok ? "response" : "error", {
         action,
         conversationId,
+        kind: "conversation-action",
         ok: response.ok,
         status: response.status
       });
@@ -510,7 +512,8 @@
     } catch (error) {
       postConversationActivity("error", {
         action,
-        conversationId
+        conversationId,
+        kind: "conversation-action"
       });
       postConversationActionResponse({
         requestId,
@@ -584,6 +587,7 @@
 
       postConversationActivity(succeeded ? "response" : "error", {
         action: "clear-all",
+        kind: "conversation-action",
         ok: succeeded,
         status: response.status
       });
@@ -596,7 +600,8 @@
       });
     } catch (error) {
       postConversationActivity("error", {
-        action: "clear-all"
+        action: "clear-all",
+        kind: "conversation-action"
       });
       postClearAllConversationsResponse({
         requestId,
