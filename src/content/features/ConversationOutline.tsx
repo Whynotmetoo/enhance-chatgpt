@@ -9,7 +9,12 @@ import {
   connectedElement,
   conversationMutationRoot
 } from "./conversationOutline/domOutline";
-import { useConversationLocation, useConversationStateActivity, useRightSidePanel } from "./conversationOutline/hooks";
+import {
+  useConversationLocation,
+  useConversationStateActivity,
+  useNewConversationStateActivity,
+  useRightSidePanel
+} from "./conversationOutline/hooks";
 import { visibleActiveItemId, visibleOutlineItems } from "./conversationOutline/rendering";
 import { nextPendingScroll, scrollContainerFor, scrollToOutlineItem } from "./conversationOutline/scroll";
 import { activePathItems, createEmptyOutlineTree, mergeDomOutlineTurns, treeHasOutlineItems } from "./conversationOutline/tree";
@@ -31,6 +36,9 @@ export function ConversationOutline(): ReactElement | null {
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
   const hasConversationStateActivity = useConversationStateActivity(conversationId, conversationLocation.changedAt);
+  const hasNewConversationStateActivity = useNewConversationStateActivity(conversationId, conversationLocation.changedAt);
+  const shouldUseImmediateDomFallback =
+    conversationLocation.previousConversationId === null && hasNewConversationStateActivity;
   const [domFallbackReady, setDomFallbackReady] = useState(false);
   const items = useMemo<OutlineItem[]>(() => bindOutlineItems(activePathItems(source.tree)), [source.tree]);
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
@@ -48,6 +56,13 @@ export function ConversationOutline(): ReactElement | null {
   useEffect(() => {
     if (!conversationId) {
       setSource({ conversationId: null, mode: "dom", tree: null });
+      setActiveId(null);
+      setPendingScroll(null);
+      return;
+    }
+
+    if (shouldUseImmediateDomFallback) {
+      setSource({ conversationId, mode: "dom", tree: null });
       setActiveId(null);
       setPendingScroll(null);
       return;
@@ -75,7 +90,7 @@ export function ConversationOutline(): ReactElement | null {
       });
 
     return () => controller.abort();
-  }, [conversationId, conversationLocation.changedAt]);
+  }, [conversationId, conversationLocation.changedAt, shouldUseImmediateDomFallback]);
 
   useEffect(() => {
     setExpandedIds(new Set());
@@ -91,7 +106,7 @@ export function ConversationOutline(): ReactElement | null {
     }
 
     if (source.mode === "dom") {
-      if (!hasConversationStateActivity && !domFallbackReady) {
+      if (!hasConversationStateActivity && !shouldUseImmediateDomFallback && !domFallbackReady) {
         return;
       }
 
@@ -162,7 +177,14 @@ export function ConversationOutline(): ReactElement | null {
       scheduleUpdate.cancel();
       observer.disconnect();
     };
-  }, [conversationId, domFallbackReady, hasConversationStateActivity, source.conversationId, source.mode]);
+  }, [
+    conversationId,
+    domFallbackReady,
+    hasConversationStateActivity,
+    shouldUseImmediateDomFallback,
+    source.conversationId,
+    source.mode
+  ]);
 
   useEffect(() => {
     const observableItems = items

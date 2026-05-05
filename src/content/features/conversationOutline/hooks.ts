@@ -11,6 +11,7 @@ import type { ConversationLocation } from "./types";
 import { isRecord } from "./utils";
 
 const activityRouteSlackMs = 1_500;
+const newConversationActivityRouteSlackMs = 30_000;
 
 type ConversationActivityObservation = {
   conversationId: string | null;
@@ -77,7 +78,8 @@ export function useRightSidePanel(): boolean {
 export function useConversationLocation(): ConversationLocation {
   const [location, setLocation] = useState<ConversationLocation>(() => ({
     conversationId: conversationIdFromLocation(),
-    changedAt: Date.now() - 1_500
+    changedAt: Date.now() - 1_500,
+    previousConversationId: null
   }));
 
   useEffect(() => {
@@ -88,7 +90,8 @@ export function useConversationLocation(): ConversationLocation {
           ? current
           : {
               conversationId,
-              changedAt
+              changedAt,
+              previousConversationId: current.conversationId
             }
       );
     };
@@ -109,7 +112,8 @@ export function useConversationLocation(): ConversationLocation {
           ? current
           : {
               conversationId,
-              changedAt
+              changedAt,
+              previousConversationId: current.conversationId
             }
       );
     };
@@ -137,17 +141,41 @@ function activityConversationId(activity: ConversationActivity): string | null {
   return activity.conversationId ?? (activity.href ? conversationIdFromUrl(activity.href) : null);
 }
 
+function isConversationStateActivity(activity: ConversationActivity): boolean {
+  return activity.kind === "conversation-state" || activity.kind === null;
+}
+
 function isRelevantConversationActivity(
   activity: ConversationActivity,
   conversationId: string,
   changedAt: number
 ): boolean {
+  if (!isConversationStateActivity(activity)) {
+    return false;
+  }
+
   if (activity.changedAt < changedAt - activityRouteSlackMs) {
     return false;
   }
 
   const activityId = activityConversationId(activity);
   return activityId === conversationId || activityId === null;
+}
+
+function isNewConversationActivity(activity: ConversationActivity, changedAt: number): boolean {
+  if (!isConversationStateActivity(activity)) {
+    return false;
+  }
+
+  const activityId = activityConversationId(activity);
+  if (activityId !== null) {
+    return false;
+  }
+
+  return (
+    activity.changedAt >= changedAt - newConversationActivityRouteSlackMs &&
+    activity.changedAt <= changedAt + activityRouteSlackMs
+  );
 }
 
 export function useConversationStateActivity(conversationId: string | null, changedAt: number): boolean {
@@ -174,6 +202,40 @@ export function useConversationStateActivity(conversationId: string | null, chan
 
     return subscribeConversationActivity((activity) => {
       if (isRelevantConversationActivity(activity, conversationId, changedAt)) {
+        setObservation({ conversationId, changedAt, observed: true });
+      }
+    });
+  }, [conversationId, changedAt]);
+
+  return (
+    observation.conversationId === conversationId &&
+    observation.changedAt === changedAt &&
+    observation.observed
+  );
+}
+
+export function useNewConversationStateActivity(conversationId: string | null, changedAt: number): boolean {
+  const [observation, setObservation] = useState<ConversationActivityObservation>(() => ({
+    conversationId,
+    changedAt,
+    observed: conversationId
+      ? recentConversationActivity().some((activity) => isNewConversationActivity(activity, changedAt))
+      : false
+  }));
+
+  useEffect(() => {
+    if (!conversationId) {
+      setObservation({ conversationId: null, changedAt, observed: false });
+      return;
+    }
+
+    const hasRecentActivity = () =>
+      recentConversationActivity().some((activity) => isNewConversationActivity(activity, changedAt));
+
+    setObservation({ conversationId, changedAt, observed: hasRecentActivity() });
+
+    return subscribeConversationActivity((activity) => {
+      if (isNewConversationActivity(activity, changedAt)) {
         setObservation({ conversationId, changedAt, observed: true });
       }
     });

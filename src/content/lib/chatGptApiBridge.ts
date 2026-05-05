@@ -11,6 +11,7 @@ const conversationListActivitySource = "enhance-chatgpt:conversation-list-activi
 export type ConversationActivity = {
   conversationId: string | null;
   href: string | null;
+  kind: "conversation-action" | "conversation-state" | null;
   changedAt: number;
   phase: "request" | "response" | "error";
 };
@@ -156,6 +157,10 @@ function installConversationActivityListener(): void {
     rememberConversationActivity({
       conversationId: typeof data.conversationId === "string" && data.conversationId.length > 0 ? data.conversationId : null,
       href: typeof data.href === "string" && data.href.length > 0 ? data.href : null,
+      kind:
+        data.kind === "conversation-action" || data.kind === "conversation-state"
+          ? data.kind
+          : null,
       changedAt: typeof data.changedAt === "number" ? data.changedAt : Date.now(),
       phase
     });

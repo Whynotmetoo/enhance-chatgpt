@@ -50,6 +50,7 @@ export type PendingScroll = {
 export type ConversationLocation = {
   conversationId: string | null;
   changedAt: number;
+  previousConversationId: string | null;
 };
 
 export type RenderedOutlineItem = OutlineItem & {
