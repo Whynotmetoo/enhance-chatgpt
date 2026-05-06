@@ -25,7 +25,7 @@ type OutlineDepthStyle = CSSProperties & {
 };
 
 const initialActiveRefreshDelays = [80, 240, 600, 1000];
-const domFallbackDelayMs = 12_000;
+const domFallbackDelayMs = 8_000;
 
 export function ConversationOutline(): ReactElement | null {
   const conversationLocation = useConversationLocation();
