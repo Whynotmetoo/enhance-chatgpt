@@ -51,6 +51,10 @@ function addRootId(rootIds: string[], nodeId: string): string[] {
   return rootIds.includes(nodeId) ? rootIds : [...rootIds, nodeId];
 }
 
+function removeRootId(rootIds: string[], nodeId: string): string[] {
+  return rootIds.includes(nodeId) ? rootIds.filter((id) => id !== nodeId) : rootIds;
+}
+
 function appendChild(nodes: Map<string, OutlineTreeNode>, parentId: string, childId: string): boolean {
   const parent = nodes.get(parentId);
   if (!parent || parent.children.includes(childId)) {
@@ -58,6 +62,16 @@ function appendChild(nodes: Map<string, OutlineTreeNode>, parentId: string, chil
   }
 
   parent.children = [...parent.children, childId];
+  return true;
+}
+
+function removeChild(nodes: Map<string, OutlineTreeNode>, parentId: string, childId: string): boolean {
+  const parent = nodes.get(parentId);
+  if (!parent || !parent.children.includes(childId)) {
+    return false;
+  }
+
+  parent.children = parent.children.filter((id) => id !== childId);
   return true;
 }
 
@@ -119,6 +133,31 @@ function sameOutlineItems(left: OutlineItem[], right: OutlineItem[]): boolean {
   );
 }
 
+function outlineTurnWeight(turn: DomOutlineTurn): number {
+  return turn.outlineWeight ?? turn.outlineItems.length;
+}
+
+function activeDomTurnId(pathTurns: DomOutlineTurn[]): string {
+  const lastTurn = pathTurns[pathTurns.length - 1];
+  const branchParentId = lastTurn.parentId;
+  if (!branchParentId || lastTurn.role !== "assistant") {
+    return lastTurn.id;
+  }
+
+  let firstBranchIndex = pathTurns.length - 1;
+  while (
+    firstBranchIndex > 0 &&
+    pathTurns[firstBranchIndex - 1].role === lastTurn.role &&
+    pathTurns[firstBranchIndex - 1].parentId === branchParentId
+  ) {
+    firstBranchIndex -= 1;
+  }
+
+  return pathTurns.slice(firstBranchIndex).reduce((best, turn) =>
+    outlineTurnWeight(turn) >= outlineTurnWeight(best) ? turn : best
+  ).id;
+}
+
 export function mergeDomOutlineTurns(tree: OutlineTree, turns: DomOutlineTurn[]): OutlineTree {
   const pathTurns = turns.filter((turn) => turn.id.length > 0);
   if (pathTurns.length === 0) {
@@ -128,23 +167,33 @@ export function mergeDomOutlineTurns(tree: OutlineTree, turns: DomOutlineTurn[])
   const nodes = cloneNodes(tree.nodes);
   let rootIds = [...tree.rootIds];
   let previousTurnId: string | null = null;
-  let changed = tree.activeNodeId !== pathTurns[pathTurns.length - 1].id;
+  let changed = tree.activeNodeId !== activeDomTurnId(pathTurns);
 
   pathTurns.forEach((turn) => {
     const existing = nodes.get(turn.id);
-    const parentId = existing?.parentId ?? previousTurnId;
+    const parentId = turn.parentId === undefined ? (existing?.parentId ?? previousTurnId) : turn.parentId;
 
     if (existing) {
       const nextElement = connectedElement(turn.element) ?? connectedElement(existing.element) ?? turn.element;
       const nextOutlineItems = mergeOutlineItems(existing.outlineItems, turn.outlineItems);
       changed ||= existing.role !== turn.role;
+      changed ||= existing.parentId !== parentId;
       changed ||= connectedElement(existing.element) !== connectedElement(nextElement);
       changed ||= !sameOutlineItems(existing.outlineItems, nextOutlineItems);
+      if (existing.parentId && existing.parentId !== parentId) {
+        changed = removeChild(nodes, existing.parentId, turn.id) || changed;
+      }
+      if (!existing.parentId && parentId) {
+        const nextRootIds = removeRootId(rootIds, turn.id);
+        changed ||= nextRootIds !== rootIds;
+        rootIds = nextRootIds;
+      }
 
       nodes.set(turn.id, {
         ...existing,
         element: nextElement,
         outlineItems: nextOutlineItems,
+        parentId,
         role: turn.role
       });
     } else {
@@ -176,7 +225,7 @@ export function mergeDomOutlineTurns(tree: OutlineTree, turns: DomOutlineTurn[])
 
   return {
     ...tree,
-    activeNodeId: pathTurns[pathTurns.length - 1].id,
+    activeNodeId: activeDomTurnId(pathTurns),
     nodes,
     rootIds
   };

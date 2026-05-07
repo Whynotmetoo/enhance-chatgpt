@@ -37,7 +37,9 @@ export type OutlineTree = {
 export type DomOutlineTurn = {
   element: HTMLElement;
   id: string;
+  outlineWeight?: number;
   outlineItems: OutlineItem[];
+  parentId?: string | null;
   role: Extract<OutlineNodeRole, "user" | "assistant">;
 };
 

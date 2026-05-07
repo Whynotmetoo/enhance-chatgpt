@@ -149,6 +149,10 @@ function answerHeadings(root: HTMLElement): HTMLElement[] {
     .sort(compareDocumentOrder);
 }
 
+function answerHeadingWeight(root: HTMLElement): number {
+  return answerHeadings(root).length;
+}
+
 function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineItem[] {
   const headings = answerHeadings(turn);
   const fallbackMessageId = messageIdFromTurn(turn, "assistant");
@@ -173,10 +177,23 @@ function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineIt
     }));
 }
 
+function paragenRoots(turn: HTMLElement): HTMLElement[] {
+  return Array.from(turn.querySelectorAll<HTMLElement>("[data-paragen-root='true']"))
+    .filter(isVisible)
+    .sort(compareDocumentOrder);
+}
+
+function bestOutlineTurn(turns: DomOutlineTurn[]): DomOutlineTurn {
+  return turns.reduce((best, turn) =>
+    (turn.outlineWeight ?? turn.outlineItems.length) >= (best.outlineWeight ?? best.outlineItems.length) ? turn : best
+  );
+}
+
 export function collectDomOutlineTurns(): DomOutlineTurn[] {
   const turns: DomOutlineTurn[] = [];
   let userIndex = 0;
   let answerIndex = 0;
+  let previousTurnId: string | null = null;
 
   collectTurnElements().forEach((turn) => {
     const role = turnRole(turn);
@@ -201,19 +218,50 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
           headingIndex: null,
           element: turn
         }],
+        parentId: previousTurnId,
         role
       });
+      previousTurnId = id;
       return;
     }
 
     if (role === "assistant") {
+      const responseRoots = paragenRoots(turn);
+      if (responseRoots.length > 1) {
+        const responseTurns = responseRoots.flatMap((responseRoot) => {
+          const responseId = messageIdFromTurn(responseRoot, "assistant");
+          if (!responseId) {
+            return [];
+          }
+
+          answerIndex += 1;
+          return [{
+            element: responseRoot,
+            id: responseId,
+            outlineItems: answerStructureItems(responseRoot, answerIndex),
+            outlineWeight: answerHeadingWeight(responseRoot),
+            parentId: previousTurnId,
+            role
+          }];
+        });
+
+        if (responseTurns.length > 0) {
+          turns.push(...responseTurns);
+          previousTurnId = bestOutlineTurn(responseTurns).id;
+          return;
+        }
+      }
+
       answerIndex += 1;
       turns.push({
         element: turn,
         id,
         outlineItems: answerStructureItems(turn, answerIndex),
+        outlineWeight: answerHeadingWeight(turn),
+        parentId: previousTurnId,
         role
       });
+      previousTurnId = id;
     }
   });
 
