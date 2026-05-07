@@ -10,6 +10,11 @@ import {
   conversationMutationRoot
 } from "./conversationOutline/domOutline";
 import {
+  cachedDomOutlineTree,
+  forgetDomOutlineTree,
+  rememberDomOutlineTree
+} from "./conversationOutline/domOutlineCache";
+import {
   useConversationLocation,
   useConversationStateActivity,
   useNewConversationStateActivity,
@@ -18,7 +23,7 @@ import {
 import { visibleActiveItemId, visibleOutlineItems } from "./conversationOutline/rendering";
 import { nextPendingScroll, scrollContainerFor, scrollToOutlineItem } from "./conversationOutline/scroll";
 import { activePathItems, createEmptyOutlineTree, mergeDomOutlineTurns, treeHasOutlineItems } from "./conversationOutline/tree";
-import type { OutlineItem, OutlineSource, PendingScroll, RenderedOutlineItem } from "./conversationOutline/types";
+import type { DomOutlineTurn, OutlineItem, OutlineSource, OutlineTree, PendingScroll, RenderedOutlineItem } from "./conversationOutline/types";
 
 type OutlineDepthStyle = CSSProperties & {
   "--ecg-depth": number;
@@ -27,6 +32,14 @@ type OutlineDepthStyle = CSSProperties & {
 const initialActiveRefreshDelays = [80, 240, 600, 1000];
 const domFallbackDelayMs = 8_000;
 
+function turnsOverlapTree(turns: DomOutlineTurn[], tree: OutlineTree): boolean {
+  if (tree.nodes.size === 0) {
+    return true;
+  }
+
+  return turns.some((turn) => tree.nodes.has(turn.id));
+}
+
 export function ConversationOutline(): ReactElement | null {
   const conversationLocation = useConversationLocation();
   const { conversationId } = conversationLocation;
@@ -34,12 +47,15 @@ export function ConversationOutline(): ReactElement | null {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
+  const [cachedDomConversationId, setCachedDomConversationId] = useState<string | null>(null);
   const isRightSidePanelOpen = useRightSidePanel();
   const hasConversationStateActivity = useConversationStateActivity(conversationId, conversationLocation.changedAt);
   const hasNewConversationStateActivity = useNewConversationStateActivity(conversationId, conversationLocation.changedAt);
   const shouldUseImmediateDomFallback =
     conversationLocation.previousConversationId === null && hasNewConversationStateActivity;
   const [domFallbackReady, setDomFallbackReady] = useState(false);
+  const isUsingCachedDomTree =
+    cachedDomConversationId === conversationId && source.mode === "dom" && source.tree !== null;
   const items = useMemo<OutlineItem[]>(() => bindOutlineItems(activePathItems(source.tree)), [source.tree]);
   const renderedItems = useMemo(() => visibleOutlineItems(items, expandedIds), [items, expandedIds]);
 
@@ -58,6 +74,16 @@ export function ConversationOutline(): ReactElement | null {
       setSource({ conversationId: null, mode: "dom", tree: null });
       setActiveId(null);
       setPendingScroll(null);
+      setCachedDomConversationId(null);
+      return;
+    }
+
+    const cachedTree = cachedDomOutlineTree(conversationId);
+    if (cachedTree) {
+      setSource({ conversationId, mode: "dom", tree: cachedTree });
+      setActiveId(null);
+      setPendingScroll(null);
+      setCachedDomConversationId(conversationId);
       return;
     }
 
@@ -65,6 +91,7 @@ export function ConversationOutline(): ReactElement | null {
       setSource({ conversationId, mode: "dom", tree: null });
       setActiveId(null);
       setPendingScroll(null);
+      setCachedDomConversationId(conversationId);
       return;
     }
 
@@ -72,6 +99,7 @@ export function ConversationOutline(): ReactElement | null {
     setSource({ conversationId, mode: "api", tree: null });
     setActiveId(null);
     setPendingScroll(null);
+    setCachedDomConversationId(null);
 
     fetchConversationOutlineTreeWithRetry(conversationId, controller.signal, conversationLocation.changedAt)
       .then((tree) => {
@@ -86,6 +114,7 @@ export function ConversationOutline(): ReactElement | null {
       .catch(() => {
         if (!controller.signal.aborted) {
           setSource({ conversationId, mode: "dom", tree: null });
+          setCachedDomConversationId(null);
         }
       });
 
@@ -97,6 +126,26 @@ export function ConversationOutline(): ReactElement | null {
   }, [conversationId]);
 
   useEffect(() => {
+    if (!source.conversationId) {
+      return;
+    }
+
+    if (
+      source.mode === "dom" &&
+      source.conversationId === cachedDomConversationId &&
+      source.tree &&
+      treeHasOutlineItems(source.tree)
+    ) {
+      rememberDomOutlineTree(source.conversationId, source.tree);
+      return;
+    }
+
+    if (source.mode === "api" && treeHasOutlineItems(source.tree)) {
+      forgetDomOutlineTree(source.conversationId);
+    }
+  }, [cachedDomConversationId, source]);
+
+  useEffect(() => {
     if (!conversationId) {
       return;
     }
@@ -106,7 +155,7 @@ export function ConversationOutline(): ReactElement | null {
     }
 
     if (source.mode === "dom") {
-      if (!hasConversationStateActivity && !shouldUseImmediateDomFallback && !domFallbackReady) {
+      if (!hasConversationStateActivity && !shouldUseImmediateDomFallback && !domFallbackReady && !isUsingCachedDomTree) {
         return;
       }
 
@@ -122,6 +171,10 @@ export function ConversationOutline(): ReactElement | null {
           }
 
           const tree = current.tree ?? createEmptyOutlineTree(conversationId);
+          if (isUsingCachedDomTree && !turnsOverlapTree(turns, tree)) {
+            return current;
+          }
+
           const nextTree = mergeDomOutlineTurns(tree, turns);
           if (nextTree === tree) {
             return current;
@@ -181,6 +234,7 @@ export function ConversationOutline(): ReactElement | null {
     conversationId,
     domFallbackReady,
     hasConversationStateActivity,
+    isUsingCachedDomTree,
     shouldUseImmediateDomFallback,
     source.conversationId,
     source.mode
