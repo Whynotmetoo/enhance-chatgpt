@@ -11,7 +11,7 @@
     "128": "icons/128.png"
   },
   "action": {
-    "default_title": "Enhance ChatGPT",
+    "default_title": "EnhanceGPT",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/16.png",

@@ -81,11 +81,56 @@ function stableOutlineId(element: HTMLElement, prefix: string, index: number): s
   return id;
 }
 
-function messageIdFromTurn(turn: HTMLElement): string | null {
-  return (
-    turn.querySelector<HTMLElement>("[data-message-id]")?.getAttribute("data-message-id") ??
-    turn.getAttribute("data-turn-id")
-  );
+function lastElement<T>(elements: T[]): T | null {
+  return elements[elements.length - 1] ?? null;
+}
+
+function messageHasAnswerHeading(message: HTMLElement): boolean {
+  return answerHeadings(message).length > 0;
+}
+
+function assistantMessageElements(turn: HTMLElement): HTMLElement[] {
+  return Array.from(turn.querySelectorAll<HTMLElement>("[data-message-author-role='assistant'][data-message-id]"));
+}
+
+function messageElementFromTurn(turn: HTMLElement, role: "user" | "assistant" | null): HTMLElement | null {
+  if (role === "assistant") {
+    const messages = assistantMessageElements(turn);
+    return (
+      messages.find(messageHasAnswerHeading) ??
+      turn.querySelector<HTMLElement>("[data-turn-start-message='true'][data-message-id]") ??
+      lastElement(messages) ??
+      turn.querySelector<HTMLElement>("[data-message-id]")
+    );
+  }
+
+  if (role === "user") {
+    return (
+      turn.querySelector<HTMLElement>("[data-message-author-role='user'][data-message-id]") ??
+      turn.querySelector<HTMLElement>("[data-message-id]")
+    );
+  }
+
+  return turn.querySelector<HTMLElement>("[data-message-id]");
+}
+
+function messageIdFromTurn(turn: HTMLElement, role: "user" | "assistant" | null): string | null {
+  return messageElementFromTurn(turn, role)?.getAttribute("data-message-id") ?? turn.getAttribute("data-turn-id");
+}
+
+function messageIdForHeading(element: HTMLElement, fallback: string | null): string | null {
+  return element.closest<HTMLElement>("[data-message-id]")?.getAttribute("data-message-id") ?? fallback;
+}
+
+function headingIndexInMessage(element: HTMLElement, fallback: number): number {
+  const message = element.closest<HTMLElement>("[data-message-id]");
+  if (!message) {
+    return fallback;
+  }
+
+  const headings = answerHeadings(message);
+  const index = headings.indexOf(element);
+  return index >= 0 ? index : fallback;
 }
 
 function userLabel(turn: HTMLElement, index: number): string {
@@ -106,6 +151,7 @@ function answerHeadings(root: HTMLElement): HTMLElement[] {
 
 function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineItem[] {
   const headings = answerHeadings(turn);
+  const fallbackMessageId = messageIdFromTurn(turn, "assistant");
 
   if (headings.length === 0) {
     return [];
@@ -121,8 +167,8 @@ function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineIt
       label: normalizeLabel(element.textContent, `ChatGPT response ${answerIndex}`),
       level: 2,
       kind: "heading",
-      messageId: messageIdFromTurn(turn),
-      headingIndex,
+      messageId: messageIdForHeading(element, fallbackMessageId),
+      headingIndex: headingIndexInMessage(element, headingIndex),
       element
     }));
 }
@@ -134,7 +180,7 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
 
   collectTurnElements().forEach((turn) => {
     const role = turnRole(turn);
-    const id = messageIdFromTurn(turn);
+    const id = messageIdFromTurn(turn, role);
 
     if (!id || !role || !isVisible(turn)) {
       return;
