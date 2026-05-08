@@ -21,9 +21,6 @@
   --ecg-intro-logo-filter: none;
   --ecg-intro-shadow: 0 18px 60px rgb(34 33 29 / 20%), 0 0 1px rgb(34 33 29 / 48%);
   --ecg-intro-focus: #2f6fed;
-  --ecg-intro-primary-surface: #22211d;
-  --ecg-intro-primary-surface-hover: #3a3832;
-  --ecg-intro-primary-text: #fffdf8;
 }
 
 #enhance-chatgpt-root {
@@ -128,23 +125,21 @@
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: var(--ecg-intro-text-muted);
+  color: var(--text-secondary, var(--ecg-intro-text-muted));
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  height: 36px;
+  height: 32px;
   justify-content: center;
   padding: 0;
   transition: background-color 160ms ease, color 160ms ease;
-  width: 36px;
+  width: 32px;
 }
 
 .ecg-intro-close:hover,
 .ecg-intro-close:focus-visible {
-  background: var(--ecg-intro-surface-hover);
-  color: var(--ecg-intro-text);
+  background: var(--surface-hover, var(--ecg-intro-surface-hover));
+  color: var(--text-primary, var(--ecg-intro-text));
   outline: none;
 }
 
@@ -242,25 +237,25 @@
 
 .ecg-intro-primary {
   align-items: center;
-  background: var(--ecg-intro-primary-surface);
-  border: 1px solid var(--ecg-intro-primary-surface);
+  background: var(--text-primary, var(--ecg-intro-text));
+  border: 1px solid transparent;
   border-radius: 999px;
-  color: var(--ecg-intro-primary-text);
+  color: var(--main-surface-primary, var(--ecg-intro-surface));
   cursor: pointer;
   display: inline-flex;
   font: inherit;
   font-size: 14px;
-  font-weight: 800;
-  height: 38px;
+  font-weight: 500;
+  height: 36px;
   justify-content: center;
-  min-width: 112px;
-  padding: 0 18px;
-  transition: background-color 160ms ease, border-color 160ms ease;
+  line-height: 20px;
+  min-width: 98px;
+  padding: 0 14px;
+  transition: opacity 160ms ease;
 }
 
 .ecg-intro-primary:hover {
-  background: var(--ecg-intro-primary-surface-hover);
-  border-color: var(--ecg-intro-primary-surface-hover);
+  opacity: 0.88;
 }
 
 :root.dark,
@@ -280,9 +275,6 @@ body.dark,
   --ecg-intro-logo-filter: invert(1) brightness(1.08);
   --ecg-intro-shadow: 0 22px 70px rgb(0 0 0 / 52%), 0 0 1px rgb(255 255 255 / 20%);
   --ecg-intro-focus: #7aa7ff;
-  --ecg-intro-primary-surface: #ececf1;
-  --ecg-intro-primary-surface-hover: #ffffff;
-  --ecg-intro-primary-text: #1f1f1f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -300,9 +292,6 @@ body.dark,
     --ecg-intro-logo-filter: invert(1) brightness(1.08);
     --ecg-intro-shadow: 0 22px 70px rgb(0 0 0 / 52%), 0 0 1px rgb(255 255 255 / 20%);
     --ecg-intro-focus: #7aa7ff;
-    --ecg-intro-primary-surface: #ececf1;
-    --ecg-intro-primary-surface-hover: #ffffff;
-    --ecg-intro-primary-text: #1f1f1f;
   }
 }
 
@@ -323,9 +312,6 @@ body.light,
   --ecg-intro-logo-filter: none;
   --ecg-intro-shadow: 0 18px 60px rgb(34 33 29 / 20%), 0 0 1px rgb(34 33 29 / 48%);
   --ecg-intro-focus: #2f6fed;
-  --ecg-intro-primary-surface: #22211d;
-  --ecg-intro-primary-surface-hover: #3a3832;
-  --ecg-intro-primary-text: #fffdf8;
 }
 
 @media (max-width: 520px) {

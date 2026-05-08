@@ -5,6 +5,7 @@ import {
   EXTENSION_LISTING_URL,
   GITHUB_REPOSITORY_URL
 } from "../../shared/constants";
+import { CloseIcon } from "../lib/icons";
 import { loadStorageFlag, saveStorageFlag } from "../lib/browserStorage";
 
 const onboardingSeenKey = "onboarding-seen:v1";
@@ -149,7 +150,7 @@ export function FirstRunIntroModal(): ReactElement | null {
             type="button"
             onClick={dismiss}
           >
-            X
+            <CloseIcon height="20" width="20" />
           </button>
         </header>
 
