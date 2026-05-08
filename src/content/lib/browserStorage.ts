@@ -213,3 +213,22 @@ export async function savePrompts(prompts: SavedPrompt[]): Promise<void> {
     globalThis.localStorage?.setItem(fallbackStorageKeyFor(storageKey), JSON.stringify(prompts));
   }
 }
+
+export async function loadStorageFlag(key: string): Promise<boolean> {
+  const extensionItems = await storageGet(key);
+  const extensionValue = extensionItems?.[key];
+
+  if (typeof extensionValue === "boolean") {
+    return extensionValue;
+  }
+
+  return globalThis.localStorage?.getItem(fallbackStorageKeyFor(key)) === "true";
+}
+
+export async function saveStorageFlag(key: string, value: boolean): Promise<void> {
+  const savedToExtension = await storageSet({ [key]: value });
+
+  if (!savedToExtension) {
+    globalThis.localStorage?.setItem(fallbackStorageKeyFor(key), String(value));
+  }
+}
