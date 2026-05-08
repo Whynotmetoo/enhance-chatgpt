@@ -138,8 +138,10 @@ export function FirstRunIntroModal(): ReactElement | null {
           <span className="ecg-intro-logo" aria-hidden="true">
             <img src={extensionResourceUrl("icons/icon-transparent.svg")} alt="" width="34" height="34" />
           </span>
-          <p className="ecg-intro-eyebrow">Welcome</p>
-          <h2 id={titleId}>EnhanceGPT is ready</h2>
+          <div>
+            <p className="ecg-intro-eyebrow">Welcome</p>
+            <h2 id={titleId}>EnhanceGPT is ready</h2>
+          </div>
           <button
             aria-label="Close"
             className="ecg-intro-close"
@@ -153,29 +155,21 @@ export function FirstRunIntroModal(): ReactElement | null {
 
         <div className="ecg-intro-body">
           <p className="ecg-intro-lede" id={descriptionId}>
-            EnhanceGPT adds a small set of native-feeling workflow upgrades to ChatGPT.
+            EnhanceGPT adds lightweight, native-feeling, and non-intrusive UI enhancements to
+            ChatGPT.
           </p>
 
-          <p className="ecg-intro-copy">
-            Use it to manage conversations faster, reuse saved prompts, and navigate long chats
-            with a lightweight outline. It stays out of the way and blends into the ChatGPT
-            interface instead of replacing it.
-          </p>
-
-          <p className="ecg-intro-compatibility">Works on chatgpt.com and chat.openai.com.</p>
-
-          <ul className="ecg-intro-feature-list" aria-label="EnhanceGPT features">
-            <li>Bulk-select conversations from the ChatGPT sidebar</li>
-            <li>Quickly access saved prompt snippets from the composer</li>
-            <li>View a lightweight outline for long conversations</li>
-          </ul>
+          <div className="ecg-intro-feature-grid" aria-label="Included enhancements">
+            <span>Bulk chat management</span>
+            <span>Reusable prompt snippets</span>
+            <span>Conversation outlines</span>
+          </div>
 
           <section className="ecg-intro-privacy" aria-labelledby="ecg-intro-privacy-title">
             <h3 id="ecg-intro-privacy-title">Data and privacy</h3>
             <p>
-              EnhanceGPT does not send your saved prompts or conversation data to an external
-              server. Data used by the extension is handled locally in your browser with Chrome
-              extension storage.
+              Your EnhanceGPT data is stored entirely in your local browser. It is not sent to
+              third-party servers, and you stay in control of what you save or remove.
             </p>
           </section>
 

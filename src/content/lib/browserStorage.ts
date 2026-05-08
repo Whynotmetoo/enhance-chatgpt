@@ -36,7 +36,15 @@ function extensionApi(): ExtensionApi | undefined {
     chrome?: ExtensionApi;
   };
 
-  return scope.browser ?? scope.chrome;
+  if (scope.chrome?.storage?.local) {
+    return scope.chrome;
+  }
+
+  if (scope.browser?.storage?.local) {
+    return scope.browser;
+  }
+
+  return scope.chrome ?? scope.browser;
 }
 
 async function storageGet(key: string): Promise<Record<string, unknown> | undefined> {
