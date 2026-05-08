@@ -36,7 +36,15 @@ function extensionApi(): ExtensionApi | undefined {
     chrome?: ExtensionApi;
   };
 
-  return scope.browser ?? scope.chrome;
+  if (scope.chrome?.storage?.local) {
+    return scope.chrome;
+  }
+
+  if (scope.browser?.storage?.local) {
+    return scope.browser;
+  }
+
+  return scope.chrome ?? scope.browser;
 }
 
 async function storageGet(key: string): Promise<Record<string, unknown> | undefined> {
@@ -211,5 +219,24 @@ export async function savePrompts(prompts: SavedPrompt[]): Promise<void> {
 
   if (!savedToExtension) {
     globalThis.localStorage?.setItem(fallbackStorageKeyFor(storageKey), JSON.stringify(prompts));
+  }
+}
+
+export async function loadStorageFlag(key: string): Promise<boolean> {
+  const extensionItems = await storageGet(key);
+  const extensionValue = extensionItems?.[key];
+
+  if (typeof extensionValue === "boolean") {
+    return extensionValue;
+  }
+
+  return globalThis.localStorage?.getItem(fallbackStorageKeyFor(key)) === "true";
+}
+
+export async function saveStorageFlag(key: string, value: boolean): Promise<void> {
+  const savedToExtension = await storageSet({ [key]: value });
+
+  if (!savedToExtension) {
+    globalThis.localStorage?.setItem(fallbackStorageKeyFor(key), String(value));
   }
 }
