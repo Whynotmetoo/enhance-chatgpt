@@ -40,7 +40,7 @@ function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem):
 
 function mergeOutlineItems(existingItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
   if (incomingItems.length === 0) {
-    return existingItems;
+    return [];
   }
 
   const existingItemsByKey = new Map(existingItems.map((item) => [outlineItemKey(item), item]));
