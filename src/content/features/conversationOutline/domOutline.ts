@@ -190,6 +190,10 @@ function bestOutlineTurn(turns: DomOutlineTurn[]): DomOutlineTurn {
   );
 }
 
+function canPruneOutlineItems(turn: HTMLElement): boolean {
+  return isVisible(turn) && turn.textContent.trim().length > 0;
+}
+
 export function collectDomOutlineTurns(): DomOutlineTurn[] {
   const turns: DomOutlineTurn[] = [];
   let userIndex = 0;
@@ -199,8 +203,9 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
   collectTurnElements().forEach((turn) => {
     const role = turnRole(turn);
     const id = messageIdFromTurn(turn, role);
+    const turnVisible = isVisible(turn);
 
-    if (!id || !role || !isVisible(turn)) {
+    if (!id || !role) {
       return;
     }
 
@@ -208,18 +213,21 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
       userIndex += 1;
       answerIndex = 0;
       turns.push({
+        canPruneOutlineItems: false,
         element: turn,
         id,
-        outlineItems: [{
-          id: stableOutlineId(turn, "user", userIndex),
-          label: userLabel(turn, userIndex),
-          level: 1,
-          kind: "user",
-          messageId: id,
-          headingIndex: null,
-          element: turn,
-          source: "dom"
-        }],
+        outlineItems: turnVisible
+          ? [{
+              id: stableOutlineId(turn, "user", userIndex),
+              label: userLabel(turn, userIndex),
+              level: 1,
+              kind: "user",
+              messageId: id,
+              headingIndex: null,
+              element: turn,
+              source: "dom"
+            }]
+          : [],
         parentId: previousTurnId,
         role
       });
@@ -238,6 +246,7 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
 
           answerIndex += 1;
           return [{
+            canPruneOutlineItems: canPruneOutlineItems(responseRoot),
             element: responseRoot,
             id: responseId,
             outlineItems: answerStructureItems(responseRoot, answerIndex),
@@ -256,10 +265,11 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
 
       answerIndex += 1;
       turns.push({
+        canPruneOutlineItems: canPruneOutlineItems(turn),
         element: turn,
         id,
-        outlineItems: answerStructureItems(turn, answerIndex),
-        outlineWeight: answerHeadingWeight(turn),
+        outlineItems: turnVisible ? answerStructureItems(turn, answerIndex) : [],
+        outlineWeight: turnVisible ? answerHeadingWeight(turn) : 0,
         parentId: previousTurnId,
         role
       });

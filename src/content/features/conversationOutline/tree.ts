@@ -39,9 +39,13 @@ function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem):
   };
 }
 
-function mergeOutlineItems(existingItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
+function mergeOutlineItems(
+  existingItems: OutlineItem[],
+  incomingItems: OutlineItem[],
+  canPruneOutlineItems: boolean
+): OutlineItem[] {
   if (incomingItems.length === 0) {
-    return existingItems.filter((item) => item.source !== "dom");
+    return canPruneOutlineItems ? existingItems.filter((item) => item.source !== "dom") : existingItems;
   }
 
   const existingItemsByKey = new Map(existingItems.map((item) => [outlineItemKey(item), item]));
@@ -191,7 +195,11 @@ export function mergeDomOutlineTurns(
 
     if (existing) {
       const nextElement = connectedElement(turn.element) ?? connectedElement(existing.element) ?? turn.element;
-      const nextOutlineItems = mergeOutlineItems(existing.outlineItems, turn.outlineItems);
+      const nextOutlineItems = mergeOutlineItems(
+        existing.outlineItems,
+        turn.outlineItems,
+        turn.canPruneOutlineItems ?? false
+      );
       changed ||= existing.role !== turn.role;
       changed ||= existing.parentId !== parentId;
       changed ||= connectedElement(existing.element) !== connectedElement(nextElement);
