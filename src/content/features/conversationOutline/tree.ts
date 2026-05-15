@@ -34,13 +34,14 @@ function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem):
   return {
     ...incoming,
     id: existing.id,
-    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element
+    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element,
+    source: existing.source
   };
 }
 
 function mergeOutlineItems(existingItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
   if (incomingItems.length === 0) {
-    return [];
+    return existingItems.filter((item) => item.source !== "dom");
   }
 
   const existingItemsByKey = new Map(existingItems.map((item) => [outlineItemKey(item), item]));
@@ -131,6 +132,7 @@ function sameOutlineItems(left: OutlineItem[], right: OutlineItem[]): boolean {
         item.kind === other.kind &&
         item.messageId === other.messageId &&
         item.headingIndex === other.headingIndex &&
+        item.source === other.source &&
         connectedElement(item.element) === connectedElement(other.element)
       );
     })

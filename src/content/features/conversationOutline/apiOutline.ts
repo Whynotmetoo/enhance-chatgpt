@@ -217,7 +217,8 @@ function outlineItemsFromApiMessage(nodeId: string, message: ApiMessage): Outlin
       kind: "user",
       messageId: id,
       headingIndex: null,
-      element: null
+      element: null,
+      source: "api"
     });
     return items;
   }
@@ -244,7 +245,8 @@ function outlineItemsFromApiMessage(nodeId: string, message: ApiMessage): Outlin
       kind: "heading",
       messageId: id,
       headingIndex,
-      element: null
+      element: null,
+      source: "api"
     });
   });
 

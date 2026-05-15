@@ -1,6 +1,7 @@
 export type OutlineKind = "user" | "assistant" | "heading";
 export type OutlineMode = "api" | "dom";
 export type OutlineNodeRole = "user" | "assistant" | "system" | "tool" | null;
+export type OutlineSourceKind = "api" | "dom";
 
 export type OutlineItem = {
   id: string;
@@ -10,6 +11,7 @@ export type OutlineItem = {
   messageId: string | null;
   headingIndex: number | null;
   element: HTMLElement | null;
+  source: OutlineSourceKind;
 };
 
 export type OutlineSource = {

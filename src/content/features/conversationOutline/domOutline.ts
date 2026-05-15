@@ -173,7 +173,8 @@ function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineIt
       kind: "heading",
       messageId: messageIdForHeading(element, fallbackMessageId),
       headingIndex: headingIndexInMessage(element, headingIndex),
-      element
+      element,
+      source: "dom"
     }));
 }
 
@@ -216,7 +217,8 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
           kind: "user",
           messageId: id,
           headingIndex: null,
-          element: turn
+          element: turn,
+          source: "dom"
         }],
         parentId: previousTurnId,
         role
@@ -362,7 +364,8 @@ function domHeadingItemsForMessage(messageId: string, apiItems: OutlineItem[]): 
       kind: "heading",
       messageId,
       headingIndex,
-      element
+      element,
+      source: apiItem?.source ?? "dom"
     };
   });
 }
