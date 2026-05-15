@@ -1,5 +1,9 @@
 import type { DomOutlineTurn, OutlineItem, OutlineTree, OutlineTreeNode } from "./types";
 
+type MergeDomOutlineTurnsOptions = {
+  preserveExistingStructure?: boolean;
+};
+
 function connectedElement(element: HTMLElement | null | undefined): HTMLElement | null {
   return element?.isConnected ? element : null;
 }
@@ -30,13 +34,14 @@ function mergeExistingOutlineItem(existing: OutlineItem, incoming: OutlineItem):
   return {
     ...incoming,
     id: existing.id,
-    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element
+    element: connectedElement(incoming.element) ?? connectedElement(existing.element) ?? incoming.element,
+    source: existing.source
   };
 }
 
 function mergeOutlineItems(existingItems: OutlineItem[], incomingItems: OutlineItem[]): OutlineItem[] {
   if (incomingItems.length === 0) {
-    return existingItems;
+    return existingItems.filter((item) => item.source !== "dom");
   }
 
   const existingItemsByKey = new Map(existingItems.map((item) => [outlineItemKey(item), item]));
@@ -127,6 +132,7 @@ function sameOutlineItems(left: OutlineItem[], right: OutlineItem[]): boolean {
         item.kind === other.kind &&
         item.messageId === other.messageId &&
         item.headingIndex === other.headingIndex &&
+        item.source === other.source &&
         connectedElement(item.element) === connectedElement(other.element)
       );
     })
@@ -158,7 +164,11 @@ function activeDomTurnId(pathTurns: DomOutlineTurn[]): string {
   ).id;
 }
 
-export function mergeDomOutlineTurns(tree: OutlineTree, turns: DomOutlineTurn[]): OutlineTree {
+export function mergeDomOutlineTurns(
+  tree: OutlineTree,
+  turns: DomOutlineTurn[],
+  options: MergeDomOutlineTurnsOptions = {}
+): OutlineTree {
   const pathTurns = turns.filter((turn) => turn.id.length > 0);
   if (pathTurns.length === 0) {
     return tree;
@@ -168,10 +178,16 @@ export function mergeDomOutlineTurns(tree: OutlineTree, turns: DomOutlineTurn[])
   let rootIds = [...tree.rootIds];
   let previousTurnId: string | null = null;
   let changed = tree.activeNodeId !== activeDomTurnId(pathTurns);
+  const preserveExistingStructure = options.preserveExistingStructure ?? false;
 
   pathTurns.forEach((turn) => {
     const existing = nodes.get(turn.id);
-    const parentId = turn.parentId === undefined ? (existing?.parentId ?? previousTurnId) : turn.parentId;
+    const parentId =
+      preserveExistingStructure && existing
+        ? existing.parentId
+        : turn.parentId === undefined
+          ? (existing?.parentId ?? previousTurnId)
+          : turn.parentId;
 
     if (existing) {
       const nextElement = connectedElement(turn.element) ?? connectedElement(existing.element) ?? turn.element;

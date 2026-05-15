@@ -1,6 +1,7 @@
 import {
   maxPendingScrollAttempts,
   outlineScrollAlignmentTolerance,
+  outlineSmoothScrollDurationMs,
   outlineScrollTopOffset,
   pendingHeadingScrollMinStep,
   pendingScrollMinStep,
@@ -13,6 +14,8 @@ type MountedOutlineAnchor = {
   element: HTMLElement;
   index: number;
 };
+
+const smoothScrollAnimations = new WeakMap<HTMLElement, number>();
 
 function mountedAnchors(items: OutlineItem[]): MountedOutlineAnchor[] {
   return items.flatMap((item, index) => {
@@ -91,12 +94,55 @@ function isElementScrollAligned(element: HTMLElement, container: HTMLElement): b
   return Math.abs(container.scrollTop - scrollTargetTop(element, container)) <= outlineScrollAlignmentTolerance;
 }
 
+function easeOutCubic(progress: number): number {
+  return 1 - (1 - progress) ** 3;
+}
+
+function stopSmoothScroll(container: HTMLElement): void {
+  const frame = smoothScrollAnimations.get(container);
+  if (frame !== undefined) {
+    window.cancelAnimationFrame(frame);
+    smoothScrollAnimations.delete(container);
+  }
+}
+
+function scrollContainerTo(container: HTMLElement, top: number, behavior: ScrollBehavior): void {
+  stopSmoothScroll(container);
+
+  if (behavior !== "smooth") {
+    container.scrollTo({ top, behavior });
+    return;
+  }
+
+  const startTop = container.scrollTop;
+  const distance = top - startTop;
+  if (Math.abs(distance) <= outlineScrollAlignmentTolerance) {
+    container.scrollTop = top;
+    return;
+  }
+
+  const startTime = window.performance.now();
+  const animate = (now: number) => {
+    const progress = Math.min((now - startTime) / outlineSmoothScrollDurationMs, 1);
+    container.scrollTop = startTop + distance * easeOutCubic(progress);
+
+    if (progress < 1) {
+      smoothScrollAnimations.set(container, window.requestAnimationFrame(animate));
+      return;
+    }
+
+    smoothScrollAnimations.delete(container);
+  };
+
+  smoothScrollAnimations.set(container, window.requestAnimationFrame(animate));
+}
+
 function scrollElementIntoView(element: HTMLElement, behavior: ScrollBehavior): boolean {
   const container = scrollContainerFor(element);
   const isAligned = isElementScrollAligned(element, container);
 
   if (!isAligned) {
-    container.scrollTo({ top: scrollTargetTop(element, container), behavior });
+    scrollContainerTo(container, scrollTargetTop(element, container), behavior);
   }
 
   return isAligned;
@@ -128,7 +174,7 @@ function scrollTowardAnchor(
     return;
   }
 
-  container.scrollTo({ top: clampScrollTop(container, container.scrollTop + direction * step), behavior });
+  scrollContainerTo(container, clampScrollTop(container, container.scrollTop + direction * step), behavior);
 }
 
 export function scrollToOutlineItem(items: OutlineItem[], index: number, behavior: ScrollBehavior): boolean {
@@ -165,7 +211,8 @@ export function nextPendingScroll(items: OutlineItem[], pendingScroll: PendingSc
     return null;
   }
 
-  const reachedExactTarget = scrollToOutlineItem(items, index, "smooth");
+  const behavior: ScrollBehavior = exactOutlineElement(items[index]) ? "smooth" : "auto";
+  const reachedExactTarget = scrollToOutlineItem(items, index, behavior);
   if (reachedExactTarget || pendingScroll.attempts + 1 >= maxPendingScrollAttempts) {
     return null;
   }

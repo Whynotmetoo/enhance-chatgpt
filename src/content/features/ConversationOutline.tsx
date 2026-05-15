@@ -209,7 +209,7 @@ export function ConversationOutline(): ReactElement | null {
           return current;
         }
 
-        const nextTree = mergeDomOutlineTurns(current.tree, turns);
+        const nextTree = mergeDomOutlineTurns(current.tree, turns, { preserveExistingStructure: true });
         if (nextTree === current.tree) {
           return current;
         }

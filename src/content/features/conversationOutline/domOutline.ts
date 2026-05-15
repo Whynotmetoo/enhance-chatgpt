@@ -173,7 +173,8 @@ function answerStructureItems(turn: HTMLElement, answerIndex: number): OutlineIt
       kind: "heading",
       messageId: messageIdForHeading(element, fallbackMessageId),
       headingIndex: headingIndexInMessage(element, headingIndex),
-      element
+      element,
+      source: "dom"
     }));
 }
 
@@ -216,7 +217,8 @@ export function collectDomOutlineTurns(): DomOutlineTurn[] {
           kind: "user",
           messageId: id,
           headingIndex: null,
-          element: turn
+          element: turn,
+          source: "dom"
         }],
         parentId: previousTurnId,
         role
@@ -286,12 +288,12 @@ function findMessageElement(messageId: string): HTMLElement | null {
 
 export function exactOutlineElement(item: OutlineItem): HTMLElement | null {
   if (!item.messageId) {
-    return item.element;
+    return visibleConnectedElement(item.element);
   }
 
   const message = findMessageElement(item.messageId);
   if (!message) {
-    return null;
+    return visibleConnectedElement(item.element);
   }
 
   const turn = message.closest<HTMLElement>("[data-turn-id]") ?? message;
@@ -301,17 +303,17 @@ export function exactOutlineElement(item: OutlineItem): HTMLElement | null {
 
   const headings = answerHeadings(message);
 
-  return headings[item.headingIndex] ?? null;
+  return headings[item.headingIndex] ?? visibleConnectedHeading(item);
 }
 
 function bindOutlineItem(item: OutlineItem): OutlineItem {
   if (!item.messageId) {
-    return item;
+    return { ...item, element: visibleConnectedElement(item.element) };
   }
 
   const message = findMessageElement(item.messageId);
   if (!message) {
-    return { ...item, element: null };
+    return { ...item, element: visibleConnectedElement(item.element) };
   }
 
   const turn = message.closest<HTMLElement>("[data-turn-id]") ?? message;
@@ -319,7 +321,7 @@ function bindOutlineItem(item: OutlineItem): OutlineItem {
 
   if (item.headingIndex !== null) {
     const headings = answerHeadings(message);
-    element = headings[item.headingIndex] ?? turn;
+    element = headings[item.headingIndex] ?? visibleConnectedHeading(item) ?? turn;
   }
 
   return { ...item, element };
@@ -362,7 +364,8 @@ function domHeadingItemsForMessage(messageId: string, apiItems: OutlineItem[]): 
       kind: "heading",
       messageId,
       headingIndex,
-      element
+      element,
+      source: apiItem?.source ?? "dom"
     };
   });
 }
@@ -396,4 +399,14 @@ export function bindOutlineItems(items: OutlineItem[]): OutlineItem[] {
 
 export function connectedElement(element: HTMLElement | null | undefined): HTMLElement | null {
   return element?.isConnected ? element : null;
+}
+
+function visibleConnectedElement(element: HTMLElement | null | undefined): HTMLElement | null {
+  const liveElement = connectedElement(element);
+  return liveElement && isVisible(liveElement) ? liveElement : null;
+}
+
+function visibleConnectedHeading(item: OutlineItem): HTMLElement | null {
+  const liveElement = visibleConnectedElement(item.element);
+  return liveElement?.matches(answerHeadingSelector) ? liveElement : null;
 }

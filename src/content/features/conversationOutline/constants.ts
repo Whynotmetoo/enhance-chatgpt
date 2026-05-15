@@ -12,3 +12,4 @@ export const pendingScrollMinStep = 480;
 export const pendingHeadingScrollMinStep = 1400;
 export const outlineScrollTopOffset = 90;
 export const outlineScrollAlignmentTolerance = 12;
+export const outlineSmoothScrollDurationMs = 220;
